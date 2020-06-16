@@ -2,6 +2,8 @@
 
 #[macro_use]
 extern crate rocket;
+use rocket_cors;
+use rocket_cors::{CorsOptions, Error};
 
 #[get("/")]
 fn index() -> &'static str {
@@ -103,7 +105,12 @@ fn tags() -> &'static str {
     "Hello, tags!"
 }
 
-fn main() {
+fn cors_options() -> CorsOptions {
+    CorsOptions::default()
+}
+
+fn main() -> Result<(), Error> {
+    let cors = cors_options().to_cors()?;
     rocket::ignite()
         .mount(
             "/api",
@@ -130,5 +137,7 @@ fn main() {
                 delete_article
             ],
         )
+        .attach(cors)
         .launch();
+    Ok(())
 }
