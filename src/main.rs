@@ -6,7 +6,7 @@ extern crate rocket;
 extern crate rocket_contrib;
 use rocket_cors;
 use rocket_cors::{CorsOptions, Error};
-use rocket_contrib::databases::postgres;
+use rocket_contrib::databases::diesel;
 
 #[get("/")]
 fn index() -> &'static str {
@@ -137,7 +137,7 @@ fn cors_options() -> CorsOptions {
 }
 
 #[database("postgres")]
-struct DbConnection(postgres::Connection);
+struct DbConnection(diesel::PgConnection);
 
 fn main() -> Result<(), Error> {
     let cors = cors_options().to_cors()?;
