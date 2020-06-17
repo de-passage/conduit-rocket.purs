@@ -9,3 +9,9 @@ edition = "2018"
 [dependencies]
 rocket = "0.4.5"
 rocket_cors = "0.5.1"
+
+[dependencies.rocket_contrib]
+version = "0.4.5"
+default-features = true
+features = ["postgres_pool"]
+

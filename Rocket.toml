@@ -1,0 +1,2 @@
+[development.databases]
+postgres = { url="postgresql://postgresq-example:postgresq-example@localhost" }
