@@ -1,14 +1,27 @@
 use crate::db::DbConnection;
 use crate::models::user::*;
-use rocket_contrib::json::JsonValue;
+use rocket_contrib::json::{JsonValue, Json};
+use serde::Deserialize;
 
 #[post("/users/login")]
 pub fn login(_conn: DbConnection) -> &'static str {
     "Hello, world!"
 }
 
-#[post("/users")]
-pub fn register(_conn: DbConnection) -> &'static str {
+#[derive(Deserialize)]
+struct NewUserData {
+    username: String,
+    email: String,
+    password: String,
+}
+
+#[derive(Deserialize)]
+pub struct UserRegistration {
+    user: NewUserData,
+}
+
+#[post("/users", data = "<user>", format = "json")]
+pub fn register(_conn: DbConnection, user: Json<UserRegistration>) -> &'static str {
     "Hello, world!"
 }
 
