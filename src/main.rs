@@ -1,15 +1,19 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 
-mod models;
-mod db;
-mod routes;
 mod authentication;
+mod db;
+mod models;
+mod routes;
+mod schema;
 #[macro_use]
 extern crate rocket;
 #[macro_use]
 extern crate rocket_contrib;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate diesel;
+extern crate scrypt;
 extern crate jsonwebtoken;
 
 use crate::db::DbConnection;

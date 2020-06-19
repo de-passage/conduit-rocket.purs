@@ -1,14 +1,15 @@
 #[derive(Serialize)]
 pub struct Username(pub String);
 
-#[derive(Serialize)]
+#[derive(Queryable, Serialize)]
 pub struct User {
-    pub username : Username,
+    pub id: i32,
+    pub username : String,
+    pub email: String,
     pub bio: Option<String>,
     pub image: Option<String>,
-    pub id: u32,
-    pub email: String,
-    pub token: String
+    #[serde(skip_serializing)]
+    pub hash: String
 }
 
 #[derive(Serialize)]
