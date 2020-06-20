@@ -2,9 +2,11 @@
 
 mod authentication;
 mod db;
+mod errors;
 mod models;
 mod routes;
 mod schema;
+
 #[macro_use]
 extern crate rocket;
 #[macro_use]
@@ -13,8 +15,8 @@ extern crate rocket_contrib;
 extern crate serde_derive;
 #[macro_use]
 extern crate diesel;
-extern crate scrypt;
 extern crate jsonwebtoken;
+extern crate scrypt;
 
 use crate::db::DbConnection;
 use rocket_cors;

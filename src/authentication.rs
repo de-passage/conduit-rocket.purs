@@ -6,20 +6,20 @@ use rocket::http::Status;
 
 #[derive(Serialize, Deserialize)]
 pub struct AuthData {
-    id: u32,
+    id: i32,
     username: String,
 }
 
-impl AuthData {
-    pub fn encode(self: &Self) -> Option<String> {
+pub fn encode_token(id:i32, username: &String, secret: String) -> Option<String> {
         encode(
             &Header::default(),
-            self,
-            &EncodingKey::from_secret("secret".as_ref()),
+            &AuthData{id, username: username.clone()},
+            &EncodingKey::from_secret(secret.as_ref()),
         )
         .ok()
-    }
+}
 
+impl AuthData {
     fn decode(token: &str) -> Option<Self> {
         jsonwebtoken::decode(
             token,

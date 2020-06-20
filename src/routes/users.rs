@@ -16,34 +16,29 @@ pub struct NewUserData {
     password: String,
 }
 
-#[derive(Deserialize)]
-pub struct UserRegistration {
-    user: NewUserData,
+#[derive(Deserialize, Serialize)]
+pub struct UserWrapper<U> {
+    user: U,
 }
 
+type UserResponse = UserWrapper<AuthenticatedUser>;
+
 #[post("/users", data = "<user>", format = "json")]
-pub fn register(conn: DbConnection, user: Json<UserRegistration>) -> &'static str {
+pub fn register(conn: DbConnection, user: Json<UserWrapper<NewUserData>>) -> JsonValue {
     match db::users::create(
         conn,
-        user.user.username.clone(),
-        user.user.email.clone(),
-        user.user.password.clone(),
+        &user.user.username,
+        &user.user.email,
+        &user.user.password,
     ) {
-        Ok(result) => "Ok",
-        Err(err) => "Error"
+        Ok(result) => json![UserResponse{ user: result }],
+        Err(err) => JsonValue::from(err)
     }
 }
 
 #[get("/user")]
 pub fn current_user(_conn: DbConnection) -> JsonValue {
-    json![User {
-        username: "Ho".to_string(),
-        bio: None,
-        image: None,
-        email: "haha@example.com".to_string(),
-        id: 0,
-        hash: String::default()
-    }]
+    json![{}]
 }
 
 #[put("/user")]
