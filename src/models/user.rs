@@ -1,6 +1,5 @@
 use crate::authentication;
 use crate::db::DbResult;
-use crate::errors::Error;
 
 #[derive(Serialize)]
 pub struct Username(pub String);
@@ -46,20 +45,16 @@ impl User {
     }
 
     pub fn to_authenticated(self, secret: &String) -> DbResult<AuthenticatedUser> {
-        match authentication::encode_token(self.id, &self.username, secret) {
-            Some(token) => {
-                println!("new token generated: {}", token);
-                Ok(AuthenticatedUser {
-                    username: self.username,
-                    bio: self.bio,
-                    email: self.email,
-                    image: self.image,
-                    token: token,
-                    id: self.id,
-                })
+        authentication::encode_token(self.id, &self.username, secret).map(|token| {
+            AuthenticatedUser {
+                username: self.username,
+                bio: self.bio,
+                email: self.email,
+                image: self.image,
+                token: token,
+                id: self.id,
             }
-            None => Err(Error::TokenError()),
-        }
+        })
     }
 }
 

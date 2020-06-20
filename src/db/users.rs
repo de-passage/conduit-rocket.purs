@@ -3,7 +3,9 @@ use crate::db::{DbConnection, DbResult};
 use crate::errors;
 use crate::models::user::{AuthenticatedUser, Profile, User, UserUpdateData};
 use crate::schema;
+use crate::schema::followings;
 use crate::schema::users;
+use errors::Error;
 use scrypt;
 
 use diesel::prelude::*;
@@ -20,7 +22,7 @@ struct NewUserData<'a> {
 #[table_name = "users"]
 struct UpdateUserData {
     username: Option<String>,
-    email: Option<String>, 
+    email: Option<String>,
     bio: Option<String>,
     image: Option<String>,
     hash: Option<String>,
@@ -33,9 +35,9 @@ pub fn create(
     password: String,
     secret: &String,
 ) -> DbResult<AuthenticatedUser> {
-    let hash = make_hash(password);
+    let hash = make_hash(password)?;
 
-    diesel::insert_into(schema::users::table)
+    diesel::insert_into(users::table)
         .values(NewUserData {
             username: &username,
             email: &email,
@@ -58,7 +60,7 @@ pub fn authenticate(
         .map_err(Into::into)
         .and_then(|user: User| {
             scrypt::scrypt_check(password, &user.hash)
-                .map_err(|_| errors::Error::AuthError())
+                .map_err(|_| Error::AuthError())
                 .and_then(|_| user.to_authenticated(secret))
         })
 }
@@ -74,11 +76,11 @@ pub fn profile(
             if current.id == user.id {
                 Ok(user.to_profile(false))
             } else {
-                let followed: bool = schema::followings::table
+                let followed: bool = followings::table
                     .filter(
-                        schema::followings::follower_id
+                        followings::follower_id
                             .eq(current.id)
-                            .and(schema::followings::followed_id.eq(user.id)),
+                            .and(followings::followed_id.eq(user.id)),
                     )
                     .count()
                     .first(conn)
@@ -103,26 +105,75 @@ pub fn find_by_id(conn: &DbConnection, id: i32) -> DbResult<User> {
         .map_err(Into::into)
 }
 
-pub fn update(conn: &DbConnection, id: i32, upd: &UserUpdateData, secret: &String) -> DbResult<AuthenticatedUser> {
+pub fn update(
+    conn: &DbConnection,
+    id: i32,
+    upd: &UserUpdateData,
+    secret: &String,
+) -> DbResult<AuthenticatedUser> {
     let data = UpdateUserData {
-        username : upd.username.clone(),
-        email : upd.username.clone(),
-        hash : upd.password.clone().map(make_hash),
+        username: upd.username.clone(),
+        email: upd.username.clone(),
+        hash: upd.password.clone().and_then(|v| make_hash(v).ok()),
         image: upd.image.clone(),
-        bio: upd.bio.clone()
+        bio: upd.bio.clone(),
     };
 
     diesel::update(users::table.filter(users::id.eq(id)))
         .set(data)
         .get_result(conn)
         .map_err(Into::into)
-        .and_then(|u : User| u.to_authenticated(secret))
+        .and_then(|u: User| u.to_authenticated(secret))
 }
 
-fn make_hash(password: String) -> String {
-    scrypt::scrypt_simple(
-        &password,
-        &scrypt::ScryptParams::new(14, 8, 1).expect("Invalid parameters"),
-    )
-    .expect("Error hashing password")
+pub fn follow(conn: &DbConnection, username: &String, id: i32) -> DbResult<Profile> {
+    use followings::{followed_id, follower_id};
+    let user = find_by_username(conn, username)?;
+    diesel::insert_into(followings::table)
+        .values((follower_id.eq(id), followed_id.eq(user.id)))
+        .execute(conn)
+        .map_err(Into::into)
+        .and_then(|inserted| {
+            if inserted > 0 {
+                Ok(user.to_profile(true))
+            } else {
+                Err(Error::DatabaseError(
+                    "followings".to_owned(),
+                    "couldn't follow user".to_owned(),
+                ))
+            }
+        })
+}
+
+pub fn unfollow(conn: &DbConnection, username: &String, id: i32) -> DbResult<Profile> {
+    use followings::{followed_id, follower_id};
+    let user = find_by_username(conn, username)?;
+    diesel::delete(followings::table.filter(follower_id.eq(id).and(followed_id.eq(user.id))))
+        .execute(conn)
+        .map_err(Into::into)
+        .and_then(|deleted| {
+            if deleted != 1 {
+                Err(Error::DatabaseError(
+                    "followings".to_owned(),
+                    "couldn't unfollow user".to_owned(),
+                ))
+            } else {
+                Ok(user.to_profile(false))
+            }
+        })
+}
+
+impl From<scrypt::errors::InvalidParams> for Error {
+    fn from(err: scrypt::errors::InvalidParams) -> Error {
+        Error::InternalServerError("password".to_owned(), err.to_string())
+    }
+}
+
+fn make_hash(password: String) -> Result<String, Error> {
+    scrypt::ScryptParams::new(14, 8, 1)
+        .map_err(Into::into)
+        .and_then(|value| {
+            scrypt::scrypt_simple(&password, &value)
+                .map_err(|err| Error::InternalServerError("password".to_owned(), err.to_string()))
+        })
 }

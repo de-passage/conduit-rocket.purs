@@ -19,19 +19,31 @@ extern crate jsonwebtoken;
 extern crate scrypt;
 
 use crate::db::DbConnection;
+use rocket::Request;
 use rocket_cors;
-use rocket_cors::{CorsOptions, Error};
+use rocket_cors::{CorsOptions};
+use crate::errors::Error;
 
 #[get("/")]
 fn index() -> &'static str {
     "Hello, world!"
 }
 
+#[catch(401)]
+fn unauthorized(_: &Request) -> Error {
+    Error::Unauthorized()
+}
+
+#[catch(403)]
+fn forbidden(_: &Request) -> Error {
+    Error::Forbidden()
+}
+
 fn cors_options() -> CorsOptions {
     CorsOptions::default()
 }
 
-fn main() -> Result<(), Error> {
+fn main() -> Result<(), rocket_cors::Error> {
     let cors = cors_options().to_cors()?;
     rocket::ignite()
         .mount(
@@ -59,6 +71,7 @@ fn main() -> Result<(), Error> {
                 routes::articles::delete_article
             ],
         )
+        .register(catchers![forbidden, unauthorized])
         .attach(cors)
         .attach(DbConnection::fairing())
         .launch();

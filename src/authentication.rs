@@ -1,18 +1,19 @@
-use jsonwebtoken::*;
+use jsonwebtoken::{encode, Header, EncodingKey, Validation, DecodingKey};
 use rocket;
 use rocket::http::Status;
 use rocket::request::{FromRequest, Outcome, Request};
 use serde::{Deserialize, Serialize};
-use crate::errors;
+use crate::errors::Error;
+use crate::db::DbResult;
 
 #[derive(Serialize, Deserialize)]
 pub struct AuthData {
     pub id: i32,
     pub username: String,
-    pub exp:i32,
+    pub exp: i32
 }
 
-pub fn encode_token(id: i32, username: &String, secret: &String) -> Option<String> {
+pub fn encode_token(id: i32, username: &String, secret: &String) -> DbResult<String> {
     encode(
         &Header::default(),
         &AuthData {
@@ -22,7 +23,7 @@ pub fn encode_token(id: i32, username: &String, secret: &String) -> Option<Strin
         },
         &EncodingKey::from_secret(secret.as_ref()),
     )
-    .ok()
+    .map_err(|err| Error::InternalServerError("jwt".to_owned(), err.to_string()))
 }
 
 impl AuthData {
@@ -39,21 +40,21 @@ impl AuthData {
 }
 
 impl<'a, 'r> FromRequest<'a, 'r> for AuthData {
-    type Error = errors::Error;
+    type Error = ();
+
     fn from_request(request: &'a Request<'r>) -> Outcome<AuthData, Self::Error> {
         match request.headers().get_one("authorization") {
             Some(auth_header) => {
                 if auth_header[0..6].to_lowercase() == "token " {
-                    println!("Decoding with token {}", &auth_header[6..]);
                     match AuthData::decode(&auth_header[6..]) {
                         Some(data) => Outcome::Success(data),
-                        None => Outcome::Failure((Status::Forbidden, errors::Error::Forbidden())),
+                        None => Outcome::Failure((Status::Forbidden, ())),
                     }
                 } else {
-                    Outcome::Failure((Status::Forbidden, errors::Error::Forbidden()))
+                    Outcome::Failure((Status::Forbidden, ()))
                 }
             }
-            None => Outcome::Failure((Status::Unauthorized, errors::Error::Unauthorized())),
+            None => Outcome::Failure((Status::Unauthorized, ())),
         }
     }
 }

@@ -69,16 +69,16 @@ pub fn update_current_user(
 }
 
 #[get("/profiles/<username>")]
-pub fn profile(conn: DbConnection, username: String) -> DbResult<Profile> {
-    db::users::profile(&conn, &username, &None)
+pub fn profile(conn: DbConnection, username: String, auth: Option<AuthData>) -> DbResult<Profile> {
+    db::users::profile(&conn, &username, &auth)
 }
 
 #[post("/profiles/<username>/follow")]
-pub fn follow(_conn: DbConnection, username: String) -> String {
-    format!["Hello, {}", username]
+pub fn follow(conn: DbConnection, username: String, auth: AuthData) -> DbResult<Profile> {
+    db::users::follow(&conn, &username, auth.id)
 }
 
 #[delete("/profiles/<username>/follow")]
-pub fn unfollow(_conn: DbConnection, username: String) -> String {
-    format!["Hello, {}", username]
+pub fn unfollow(conn: DbConnection, username: String, auth: AuthData) -> DbResult<Profile> {
+    db::users::unfollow(&conn, &username, auth.id)
 }
