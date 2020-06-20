@@ -1,7 +1,7 @@
-use crate::authentication;
+use crate::authentication::AuthData;
 use crate::db::{DbConnection, DbResult};
 use crate::errors;
-use crate::models::user::{AuthenticatedUser, Profile, User};
+use crate::models::user::{AuthenticatedUser, Profile, User, UserUpdateData};
 use crate::schema;
 use crate::schema::users;
 use scrypt;
@@ -16,17 +16,24 @@ struct NewUserData<'a> {
     hash: &'a str,
 }
 
+#[derive(AsChangeset)]
+#[table_name = "users"]
+struct UpdateUserData {
+    username: Option<String>,
+    email: Option<String>, 
+    bio: Option<String>,
+    image: Option<String>,
+    hash: Option<String>,
+}
+
 pub fn create(
     conn: &DbConnection,
     username: &String,
     email: &String,
-    password: &String,
+    password: String,
+    secret: &String,
 ) -> DbResult<AuthenticatedUser> {
-    let hash = scrypt::scrypt_simple(
-        &password,
-        &scrypt::ScryptParams::new(14, 8, 1).expect("Invalid parameters"),
-    )
-    .expect("Error hashing password");
+    let hash = make_hash(password);
 
     diesel::insert_into(schema::users::table)
         .values(NewUserData {
@@ -36,13 +43,14 @@ pub fn create(
         })
         .get_result(conn)
         .map_err(Into::into)
-        .and_then(to_authenticated)
+        .and_then(|u: User| u.to_authenticated(secret))
 }
 
 pub fn authenticate(
     conn: &DbConnection,
     email: &String,
     password: &String,
+    secret: &String,
 ) -> DbResult<AuthenticatedUser> {
     schema::users::table
         .filter(users::email.eq(email))
@@ -51,57 +59,70 @@ pub fn authenticate(
         .and_then(|user: User| {
             scrypt::scrypt_check(password, &user.hash)
                 .map_err(|_| errors::Error::AuthError())
-                .and_then(|_| to_authenticated(user))
+                .and_then(|_| user.to_authenticated(secret))
         })
 }
 
 pub fn profile(
     conn: &DbConnection,
     username: &String,
-    current_user: &Option<AuthenticatedUser>,
+    current_user: &Option<AuthData>,
 ) -> DbResult<Profile> {
+    find_by_username(conn, username).and_then(|user: User| match current_user {
+        None => Ok(user.to_profile(false)),
+        Some(current) => {
+            if current.id == user.id {
+                Ok(user.to_profile(false))
+            } else {
+                let followed: bool = schema::followings::table
+                    .filter(
+                        schema::followings::follower_id
+                            .eq(current.id)
+                            .and(schema::followings::followed_id.eq(user.id)),
+                    )
+                    .count()
+                    .first(conn)
+                    .map_or(false, |x: i64| x > 0);
+                Ok(user.to_profile(followed))
+            }
+        }
+    })
+}
+
+pub fn find_by_username(conn: &DbConnection, username: &String) -> DbResult<User> {
     schema::users::table
         .filter(users::username.eq(username))
         .get_result(conn)
         .map_err(Into::into)
-        .and_then(|user: User| match current_user {
-            None => Ok(to_profile(user, false)),
-            Some(current) => {
-                if current.id == user.id {
-                    Ok(to_profile(user, false))
-                } else {
-                    let followed: bool = schema::followings::table
-                        .filter(schema::followings::follower_id
-                            .eq(current.id)
-                            .and(schema::followings::followed_id.eq(user.id)))
-                        .count()
-                        .first(conn)
-                        .map_or(false, |x : i64| x > 0);
-                    Ok(to_profile(user, followed))
-                }
-            }
-        })
 }
 
-fn to_profile(user: User, followed: bool) -> Profile {
-    Profile {
-        username: user.username,
-        bio: user.bio,
-        image: user.image,
-        following: followed,
-    }
+pub fn find_by_id(conn: &DbConnection, id: i32) -> DbResult<User> {
+    schema::users::table
+        .filter(users::id.eq(id))
+        .get_result(conn)
+        .map_err(Into::into)
 }
 
-fn to_authenticated(user: User) -> DbResult<AuthenticatedUser> {
-    match authentication::encode_token(user.id, &user.username, "secret".to_owned()) {
-        Some(token) => Ok(AuthenticatedUser {
-            username: user.username,
-            bio: user.bio,
-            email: user.email,
-            image: user.image,
-            token: token,
-            id: user.id,
-        }),
-        None => Err(errors::Error::TokenError()),
-    }
+pub fn update(conn: &DbConnection, id: i32, upd: &UserUpdateData, secret: &String) -> DbResult<AuthenticatedUser> {
+    let data = UpdateUserData {
+        username : upd.username.clone(),
+        email : upd.username.clone(),
+        hash : upd.password.clone().map(make_hash),
+        image: upd.image.clone(),
+        bio: upd.bio.clone()
+    };
+
+    diesel::update(users::table.filter(users::id.eq(id)))
+        .set(data)
+        .get_result(conn)
+        .map_err(Into::into)
+        .and_then(|u : User| u.to_authenticated(secret))
+}
+
+fn make_hash(password: String) -> String {
+    scrypt::scrypt_simple(
+        &password,
+        &scrypt::ScryptParams::new(14, 8, 1).expect("Invalid parameters"),
+    )
+    .expect("Error hashing password")
 }

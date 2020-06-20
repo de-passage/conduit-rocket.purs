@@ -10,6 +10,8 @@ pub enum Error {
     DatabaseError(String, String),
     TokenError(),
     AuthError(),
+    Forbidden(),
+    Unauthorized(),
 }
 
 impl From<result::Error> for Error {
@@ -30,6 +32,12 @@ impl From<Error> for JsonValue {
             Error::AuthError() => json![{
                     "email or password": "is invalid"
             }],
+            Error::Unauthorized() => json![{
+                "unauthorized": "you need to be logged in to access this resource"
+            }],
+            Error::Forbidden() => json![{
+                "forbidden": "you are not allowed to access this resource"
+            }]
         }
     }
 }
