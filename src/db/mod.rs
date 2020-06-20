@@ -1,4 +1,6 @@
 pub mod users;
+pub mod articles;
+pub mod comments;
 
 use diesel::connection::{Connection, SimpleConnection};
 use diesel::deserialize::{Queryable, QueryableByName};

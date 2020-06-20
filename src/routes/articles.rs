@@ -1,26 +1,18 @@
 use crate::db::DbConnection;
+use crate::authentication::AuthData;
+use crate::models;
+use crate::db;
 
 #[get("/articles?<tag>&<author>&<offset>&<limit>&<favorited>")]
 pub fn articles(
-    _conn: DbConnection,
+    conn: DbConnection,
+    option: AuthData,
     tag: Option<String>,
     author: Option<String>,
     offset: Option<u32>,
     limit: Option<u32>,
     favorited: Option<bool>,
-) -> String {
-    let params = vec![
-        tag,
-        author,
-        offset.map(|x| x.to_string()),
-        limit.map(|x| x.to_string()),
-        favorited.map(|x| x.to_string()),
-    ]
-    .into_iter()
-    .flat_map(|o| o.into_iter())
-    .collect::<Vec<_>>()
-    .join(", ");
-    format!("Hello, world!?{}", params)
+) {
 }
 
 #[post("/articles")]

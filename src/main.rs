@@ -17,6 +17,7 @@ extern crate serde_derive;
 extern crate diesel;
 extern crate jsonwebtoken;
 extern crate scrypt;
+extern crate chrono;
 
 use crate::db::DbConnection;
 use rocket::Request;
