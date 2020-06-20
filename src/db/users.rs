@@ -1,7 +1,7 @@
 use crate::authentication;
-use crate::db::DbConnection;
+use crate::db::{DbConnection, DbResult};
 use crate::errors;
-use crate::models;
+use crate::models::user::{AuthenticatedUser, Profile, User};
 use crate::schema;
 use crate::schema::users;
 use scrypt;
@@ -21,7 +21,7 @@ pub fn create(
     username: &String,
     email: &String,
     password: &String,
-) -> Result<models::user::AuthenticatedUser, errors::Error> {
+) -> DbResult<AuthenticatedUser> {
     let hash = scrypt::scrypt_simple(
         &password,
         &scrypt::ScryptParams::new(14, 8, 1).expect("Invalid parameters"),
@@ -34,36 +34,74 @@ pub fn create(
             email: &email,
             hash: &hash,
         })
-        .get_result(&conn.0)
+        .get_result(conn)
         .map_err(Into::into)
         .and_then(to_authenticated)
-}
-
-fn to_authenticated(user: models::user::User) -> Result<models::user::AuthenticatedUser, errors::Error> {
-    match authentication::encode_token(user.id, &user.username, "secret".to_owned()) {
-        Some(token) => Ok(models::user::AuthenticatedUser {
-            username: user.username,
-            bio: user.bio,
-            email: user.email,
-            image: user.image,
-            token: token,
-        }),
-        None => Err(errors::Error::TokenError()),
-    }
 }
 
 pub fn authenticate(
     conn: &DbConnection,
     email: &String,
     password: &String,
-) -> Result<models::user::AuthenticatedUser, errors::Error> {
+) -> DbResult<AuthenticatedUser> {
     schema::users::table
         .filter(users::email.eq(email))
-        .get_result(&conn.0)
+        .get_result(conn)
         .map_err(Into::into)
-        .and_then(|user: models::user::User| {
+        .and_then(|user: User| {
             scrypt::scrypt_check(password, &user.hash)
                 .map_err(|_| errors::Error::AuthError())
                 .and_then(|_| to_authenticated(user))
         })
+}
+
+pub fn profile(
+    conn: &DbConnection,
+    username: &String,
+    current_user: &Option<AuthenticatedUser>,
+) -> DbResult<Profile> {
+    schema::users::table
+        .filter(users::username.eq(username))
+        .get_result(conn)
+        .map_err(Into::into)
+        .and_then(|user: User| match current_user {
+            None => Ok(to_profile(user, false)),
+            Some(current) => {
+                if current.id == user.id {
+                    Ok(to_profile(user, false))
+                } else {
+                    let followed: bool = schema::followings::table
+                        .filter(schema::followings::follower_id
+                            .eq(current.id)
+                            .and(schema::followings::followed_id.eq(user.id)))
+                        .count()
+                        .first(conn)
+                        .map_or(false, |x : i64| x > 0);
+                    Ok(to_profile(user, followed))
+                }
+            }
+        })
+}
+
+fn to_profile(user: User, followed: bool) -> Profile {
+    Profile {
+        username: user.username,
+        bio: user.bio,
+        image: user.image,
+        following: followed,
+    }
+}
+
+fn to_authenticated(user: User) -> DbResult<AuthenticatedUser> {
+    match authentication::encode_token(user.id, &user.username, "secret".to_owned()) {
+        Some(token) => Ok(AuthenticatedUser {
+            username: user.username,
+            bio: user.bio,
+            email: user.email,
+            image: user.image,
+            token: token,
+            id: user.id,
+        }),
+        None => Err(errors::Error::TokenError()),
+    }
 }

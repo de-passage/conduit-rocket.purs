@@ -18,12 +18,14 @@ pub struct AuthenticatedUser {
     pub email: String,
     pub bio: Option<String>,
     pub image: Option<String>,
-    pub token: String
+    pub token: String,
+    #[serde(skip_serializing)]
+    pub id: i32
 }
 
 #[derive(Serialize)]
 pub struct Profile {
-    pub username: Username,
+    pub username: String,
     pub bio: Option<String>, 
     pub image: Option<String>,
     pub following: bool

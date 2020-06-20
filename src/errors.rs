@@ -1,10 +1,15 @@
 use diesel::result;
-use rocket_contrib::json::JsonValue;
+use rocket::http::Status;
+use rocket::response;
+use rocket::response::{status, Responder};
+use rocket::Request;
+use rocket_contrib::json::{Json, JsonValue};
 
+#[derive(Debug)]
 pub enum Error {
     DatabaseError(String, String),
     TokenError(),
-    AuthError()
+    AuthError(),
 }
 
 impl From<result::Error> for Error {
@@ -17,20 +22,21 @@ impl From<Error> for JsonValue {
     fn from(error: Error) -> JsonValue {
         match error {
             Error::DatabaseError(key, value) => json![{
-                "errors": {
                     key: [value]
-                }
             }],
             Error::TokenError() => json![{
-                "errors": {
                     "token": "encoding failed"
-                }
             }],
             Error::AuthError() => json![{
-                "errors": {
                     "email or password": "is invalid"
-                }
-            }]
+            }],
         }
+    }
+}
+
+impl<'r> Responder<'r> for Error {
+    fn respond_to(self, req: &Request) -> response::Result<'r> {
+        let json = json![{ "errors": JsonValue::from(self) }];
+        status::Custom(Status::UnprocessableEntity, Json(json)).respond_to(req)
     }
 }

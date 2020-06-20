@@ -1,6 +1,9 @@
 use crate::db;
-use crate::db::DbConnection;
+use crate::db::{DbConnection, DbResult};
 use crate::models::user::*;
+use rocket::response;
+use rocket::response::Responder;
+use rocket::Request;
 use rocket_contrib::json::{Json, JsonValue};
 use serde::Deserialize;
 
@@ -14,7 +17,7 @@ pub struct NewUserData {
 #[derive(Deserialize)]
 pub struct LoginData {
     email: String,
-    password: String
+    password: String,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -24,25 +27,30 @@ pub struct UserWrapper<U> {
 
 type UserResponse = UserWrapper<AuthenticatedUser>;
 
-#[post("/users/login", data = "<user>", format = "json")]
-pub fn login(conn: DbConnection, user: Json<UserWrapper<LoginData>>) -> JsonValue {
-    match db::users::authenticate(&conn, &user.user.email, &user.user.password) {
-        Ok(result) => json![UserResponse { user: result }],
-        Err(err) => JsonValue::from(err)
+impl<'r> Responder<'r> for AuthenticatedUser {
+    fn respond_to(self, req: &Request) -> response::Result<'r> {
+        json![UserResponse { user: self }].respond_to(req)
     }
 }
 
+impl<'r> Responder<'r> for Profile {
+    fn respond_to(self, req: &Request) -> response::Result<'r> {
+        json![{ "profile": self }].respond_to(req)
+    }
+}
+
+#[post("/users/login", data = "<user>", format = "json")]
+pub fn login(conn: DbConnection, user: Json<UserWrapper<LoginData>>) -> DbResult<AuthenticatedUser> {
+    db::users::authenticate(&conn, &user.user.email, &user.user.password)
+}
+
 #[post("/users", data = "<user>", format = "json")]
-pub fn register(conn: DbConnection, user: Json<UserWrapper<NewUserData>>) -> JsonValue {
-    match db::users::create(
+pub fn register(conn: DbConnection, user: Json<UserWrapper<NewUserData>>) -> DbResult<AuthenticatedUser> {
+    db::users::create(
         &conn,
         &user.user.username,
         &user.user.email,
-        &user.user.password,
-    ) {
-        Ok(result) => json![UserResponse{ user: result }],
-        Err(err) => JsonValue::from(err)
-    }
+        &user.user.password)
 }
 
 #[get("/user")]
@@ -56,8 +64,8 @@ pub fn update_current_user(_conn: DbConnection) -> &'static str {
 }
 
 #[get("/profiles/<username>")]
-pub fn profile(_conn: DbConnection, username: String) -> String {
-    format!["Hello, {}", username]
+pub fn profile(conn: DbConnection, username: String) -> DbResult<Profile> {
+    db::users::profile(&conn, &username, &None)
 }
 
 #[post("/profiles/<username>/follow")]
