@@ -4,16 +4,17 @@ use crate::models::user::*;
 use rocket_contrib::json::{Json, JsonValue};
 use serde::Deserialize;
 
-#[post("/users/login")]
-pub fn login(_conn: DbConnection) -> &'static str {
-    "Hello, world!"
-}
-
 #[derive(Deserialize)]
 pub struct NewUserData {
     username: String,
     email: String,
     password: String,
+}
+
+#[derive(Deserialize)]
+pub struct LoginData {
+    email: String,
+    password: String
 }
 
 #[derive(Deserialize, Serialize)]
@@ -23,10 +24,18 @@ pub struct UserWrapper<U> {
 
 type UserResponse = UserWrapper<AuthenticatedUser>;
 
+#[post("/users/login", data = "<user>", format = "json")]
+pub fn login(conn: DbConnection, user: Json<UserWrapper<LoginData>>) -> JsonValue {
+    match db::users::authenticate(&conn, &user.user.email, &user.user.password) {
+        Ok(result) => json![UserResponse { user: result }],
+        Err(err) => JsonValue::from(err)
+    }
+}
+
 #[post("/users", data = "<user>", format = "json")]
 pub fn register(conn: DbConnection, user: Json<UserWrapper<NewUserData>>) -> JsonValue {
     match db::users::create(
-        conn,
+        &conn,
         &user.user.username,
         &user.user.email,
         &user.user.password,

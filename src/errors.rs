@@ -3,7 +3,8 @@ use rocket_contrib::json::JsonValue;
 
 pub enum Error {
     DatabaseError(String, String),
-    TokenError()
+    TokenError(),
+    AuthError()
 }
 
 impl From<result::Error> for Error {
@@ -23,6 +24,11 @@ impl From<Error> for JsonValue {
             Error::TokenError() => json![{
                 "errors": {
                     "token": "encoding failed"
+                }
+            }],
+            Error::AuthError() => json![{
+                "errors": {
+                    "email or password": "is invalid"
                 }
             }]
         }

@@ -1,9 +1,9 @@
+use crate::authentication;
 use crate::db::DbConnection;
+use crate::errors;
 use crate::models;
 use crate::schema;
 use crate::schema::users;
-use crate::authentication;
-use crate::errors;
 use scrypt;
 
 use diesel::prelude::*;
@@ -17,7 +17,7 @@ struct NewUserData<'a> {
 }
 
 pub fn create(
-    conn: DbConnection,
+    conn: &DbConnection,
     username: &String,
     email: &String,
     password: &String,
@@ -36,16 +36,34 @@ pub fn create(
         })
         .get_result(&conn.0)
         .map_err(Into::into)
-        .and_then(|user : models::user::User| {
-            match authentication::encode_token(user.id, &user.username, "secret".to_owned()) {
-                Some(token) => Ok(models::user::AuthenticatedUser{
-                    username: user.username,
-                    bio: user.bio,
-                    email: user.email,
-                    image: user.image,
-                    token: token
-                }),
-                None => Err(errors::Error::TokenError())
-            }
+        .and_then(to_authenticated)
+}
+
+fn to_authenticated(user: models::user::User) -> Result<models::user::AuthenticatedUser, errors::Error> {
+    match authentication::encode_token(user.id, &user.username, "secret".to_owned()) {
+        Some(token) => Ok(models::user::AuthenticatedUser {
+            username: user.username,
+            bio: user.bio,
+            email: user.email,
+            image: user.image,
+            token: token,
+        }),
+        None => Err(errors::Error::TokenError()),
+    }
+}
+
+pub fn authenticate(
+    conn: &DbConnection,
+    email: &String,
+    password: &String,
+) -> Result<models::user::AuthenticatedUser, errors::Error> {
+    schema::users::table
+        .filter(users::email.eq(email))
+        .get_result(&conn.0)
+        .map_err(Into::into)
+        .and_then(|user: models::user::User| {
+            scrypt::scrypt_check(password, &user.hash)
+                .map_err(|_| errors::Error::AuthError())
+                .and_then(|_| to_authenticated(user))
         })
 }
