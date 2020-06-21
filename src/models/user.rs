@@ -17,20 +17,6 @@ pub struct User {
     pub hash: String,
 }
 
-// impl HasTable for User {
-//     type Table = users::table;
-//     fn table() -> Self::Table {
-//         users::table
-//     }
-// }
-
-// impl Identifiable for User {
-//     type Id = i32;
-//     fn id(self) -> Self::Id {
-//         self.id
-//     }
-// }
-
 #[derive(Serialize)]
 pub struct AuthenticatedUser {
     pub username: String,
@@ -42,7 +28,7 @@ pub struct AuthenticatedUser {
     pub id: i32,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct Profile {
     pub username: String,
     pub bio: Option<String>,

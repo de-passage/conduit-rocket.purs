@@ -34,8 +34,8 @@ pub fn feed(_conn: DbConnection, limit: Option<u32>, offset: Option<u32>) -> Str
 }
 
 #[get("/articles/<slug>")]
-pub fn article(_conn: DbConnection, slug: String) -> String {
-    format!["Hello, {}", slug]
+pub fn article(conn: DbConnection, auth: Option<AuthData>, slug: String) -> DbResult<Article> {
+    db::articles::get_by_slug(&conn, auth.map(|a| a.id), &slug)
 }
 
 #[put("/articles/<slug>")]
