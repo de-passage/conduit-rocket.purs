@@ -50,17 +50,17 @@ pub fn article(conn: DbConnection, auth: Option<AuthData>, slug: String) -> DbRe
 
 #[put("/articles/<slug>", data = "<article>", format = "json")]
 pub fn update_article(
-    _conn: DbConnection,
+    conn: DbConnection,
     auth: AuthData,
     slug: String,
     article: Json<ArticleWrapper<UpdateArticleData>>,
-) -> String {
-    format!["Hello, {}", slug]
+) -> DbResult<Article> {
+    db::articles::update(&conn, auth.id, slug, &article.article)
 }
 
 #[delete("/articles/<slug>")]
-pub fn delete_article(_conn: DbConnection, auth: AuthData, slug: String) -> String {
-    format!["Hello, {}", slug]
+pub fn delete_article(conn: DbConnection, auth: AuthData, slug: String) -> DbResult<Article> {
+    db::articles::delete(&conn, auth.id, &slug)
 }
 
 #[post("/articles/<slug>/favorite")]

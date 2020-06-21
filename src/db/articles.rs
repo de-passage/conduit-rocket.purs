@@ -82,14 +82,27 @@ pub fn get_by_slug(
     current_user: Option<i32>,
     search: &String,
 ) -> DbResult<Article> {
+    use schema::article_tag_associations as atas;
     use schema::articles::dsl::*;
+    use schema::tags;
     use schema::users;
     articles
         .filter(slug.eq(search))
         .inner_join(users::table)
-        .get_result::<(PGArticle, User)>(conn)
+        .left_join(atas::table)
+        .left_join(tags::table.on(tags::id.eq(atas::tag_id)))
+        .left_join(schema::favorites::table)
+        .select((
+            articles::all_columns(),
+            users::table::all_columns(),
+            diesel::dsl::sql("array_agg(tags.tag) as tag_list"),
+        ))
+        .group_by((id, users::id))
+        .get_result::<(PGArticle, User, Option<Vec<String>>)>(conn)
         .map_err(Into::into)
-        .and_then(to_article)
+        .map(|(pg, user, tags): (PGArticle, User, Option<Vec<String>>)| {
+            pg.to_article(user.to_profile(false), tags.unwrap_or(vec![]))
+        })
 }
 
 pub fn create(conn: &DbConnection, article: &NewArticleData, user_id: i32) -> DbResult<Article> {
@@ -149,8 +162,61 @@ pub fn create(conn: &DbConnection, article: &NewArticleData, user_id: i32) -> Db
     Ok(pg_article.to_article(profile, tag_list))
 }
 
-fn to_article((pg, user): (PGArticle, User)) -> DbResult<Article> {
-    Ok(pg.to_article(user.to_profile(false), vec![]))
+pub fn delete(conn: &DbConnection, user_id: i32, to_delete: &String) -> DbResult<Article> {
+    use schema::articles::dsl::*;
+    let (author_id, art_id): (i32, i32) = articles
+        .select((author, id))
+        .filter(slug.eq(to_delete))
+        .get_result(conn)
+        .map_err(Into::<Error>::into)?;
+    if author_id != user_id {
+        return Err(Error::Unauthorized());
+    }
+    let artcl = get_by_slug(conn, Some(user_id), to_delete)?;
+    diesel::delete(articles)
+        .filter(id.eq(art_id))
+        .execute(conn)
+        .map_err(Into::<Error>::into)?;
+    Ok(artcl)
+}
+
+use schema::articles;
+#[derive(AsChangeset)]
+#[table_name = "articles"]
+struct ChangeArticle {
+    slug: Option<String>,
+    title: Option<String>,
+    description: Option<String>,
+    body: Option<String>,
+}
+
+pub fn update(
+    conn: &DbConnection,
+    user_id: i32,
+    to_update: String,
+    data: &UpdateArticleData,
+) -> DbResult<Article> {
+    use schema::articles::dsl::*;
+    let art_id: i32 = articles
+        .filter(slug.eq(&to_update).and(author.eq(user_id)))
+        .select(id)
+        .get_result(conn)
+        .map_err(|_| Error::Forbidden())?;
+    let new_slug = data.title.clone().map(|a| ammonia::clean(&a));
+    diesel::update(articles)
+        .filter(id.eq(art_id))
+        .set((
+            ChangeArticle {
+                slug: new_slug.clone(),
+                title: data.title.clone().map(|a| ammonia::clean(&a)),
+                description: data.description.clone().map(|a| ammonia::clean(&a)),
+                body: data.body.clone().map(|a| ammonia::clean(&a)),
+            },
+            updated_at.eq(diesel::dsl::now),
+        ))
+        .execute(conn)
+        .map_err(Into::<Error>::into)?;
+    get_by_slug(conn, Some(user_id), &new_slug.unwrap_or(to_update))
 }
 
 fn slugify(title: &str) -> String {
