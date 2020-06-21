@@ -1,18 +1,21 @@
 use crate::db::DbConnection;
 use crate::authentication::AuthData;
 use crate::models;
+use crate::models::article::{TagList, Article, ArticleList};
 use crate::db;
+use db::DbResult;
 
 #[get("/articles?<tag>&<author>&<offset>&<limit>&<favorited>")]
 pub fn articles(
     conn: DbConnection,
-    option: AuthData,
+    auth: Option<AuthData>,
     tag: Option<String>,
     author: Option<String>,
     offset: Option<u32>,
     limit: Option<u32>,
-    favorited: Option<bool>,
-) {
+    favorited: Option<String>,
+) -> DbResult<ArticleList> {
+    db::articles::articles(&conn, tag, author, offset, limit, favorited, auth.map(|a| a.id))
 }
 
 #[post("/articles")]
@@ -56,6 +59,6 @@ pub fn unfavorite(_conn: DbConnection, slug: String) -> String {
 }
 
 #[get("/tags")]
-pub fn tags(_conn: DbConnection) -> &'static str {
-    "Hello, tags!"
+pub fn tags(conn: DbConnection) -> DbResult<TagList> {
+    db::articles::tags(&conn)
 }

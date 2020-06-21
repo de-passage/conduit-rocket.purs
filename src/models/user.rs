@@ -1,10 +1,12 @@
 use crate::authentication;
 use crate::db::DbResult;
+use crate::schema::users;
+use diesel::associations::{Identifiable, HasTable};
 
 #[derive(Serialize)]
 pub struct Username(pub String);
 
-#[derive(Queryable)]
+#[derive(Queryable, Identifiable)]
 pub struct User {
     pub id: i32,
     pub username: String,
@@ -14,6 +16,20 @@ pub struct User {
     //#[serde(skip_serializing)]
     pub hash: String,
 }
+
+// impl HasTable for User {
+//     type Table = users::table;
+//     fn table() -> Self::Table {
+//         users::table
+//     }
+// }
+
+// impl Identifiable for User {
+//     type Id = i32;
+//     fn id(self) -> Self::Id {
+//         self.id
+//     }
+// }
 
 #[derive(Serialize)]
 pub struct AuthenticatedUser {
