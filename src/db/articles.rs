@@ -5,38 +5,56 @@ use crate::models::article::{
 };
 use crate::models::user::{Profile, User};
 use crate::schema;
-use diesel::pg::types::sql_types;
+use ammonia;
 use diesel::prelude::*;
 use errors::Error;
-use percent_encoding::{percent_encode, NON_ALPHANUMERIC};
+use rand::distributions::Alphanumeric;
+use rand::*;
+use slug;
+use std::cmp::max;
 
-sql_function! {
-    array_agg, ArrayAgg, (x: diesel::sql_types::Text) -> sql_types::Array<diesel::sql_types::Text>
-}
+const LIMIT: u32 = 20;
+const MAX_LIMIT: i64 = 500;
+const SUFFIX_LEN: usize = 8;
 
 pub fn articles(
     conn: &DbConnection,
-    tag: Option<String>,
-    author: Option<String>,
-    offset: Option<u32>,
-    limit: Option<u32>,
-    favorited: Option<String>,
+    m_tag: Option<String>,
+    m_author: Option<String>,
+    m_offset: Option<u32>,
+    m_limit: Option<u32>,
+    m_favorited: Option<String>,
     current_user: Option<i32>,
 ) -> DbResult<ArticleList> {
     use schema::article_tag_associations as atas;
     use schema::articles::dsl::*;
     use schema::tags;
     use schema::users;
-    articles
+
+    let mut query = articles
         .inner_join(users::table)
         .left_join(atas::table)
         .left_join(tags::table.on(tags::id.eq(atas::tag_id)))
+        .left_join(schema::favorites::table)
         .select((
             articles::all_columns(),
             users::table::all_columns(),
-            diesel::dsl::sql("array_agg(tags.tag)"),
+            diesel::dsl::sql("array_agg(tags.tag) as tag_list"),
         ))
         .group_by((id, users::id))
+        .into_boxed();
+    if let Some(auth) = m_author {
+        let author_id = users::table
+            .filter(users::username.eq(auth))
+            .select(users::id)
+            .get_result::<i32>(conn)
+            .map_err(Into::<Error>::into)?;
+        query = query.filter(author.eq(author_id));
+    }
+
+    query
+        .offset(m_offset.unwrap_or(0).into())
+        .limit(max(m_limit.unwrap_or(LIMIT).into(), MAX_LIMIT))
         .load(conn)
         .map_err(Into::into)
         .map(|v| {
@@ -68,8 +86,8 @@ pub fn get_by_slug(
     use schema::users;
     articles
         .filter(slug.eq(search))
-        .left_join(users::table)
-        .get_result::<(PGArticle, Option<User>)>(conn)
+        .inner_join(users::table)
+        .get_result::<(PGArticle, User)>(conn)
         .map_err(Into::into)
         .and_then(to_article)
 }
@@ -85,10 +103,10 @@ pub fn create(conn: &DbConnection, article: &NewArticleData, user_id: i32) -> Db
 
     let pg_article: PGArticle = diesel::insert_into(articles)
         .values((
-            slug.eq(percent_encode(article.title.as_ref(), NON_ALPHANUMERIC).collect::<String>()),
-            title.eq(&article.title),
-            description.eq(&article.description),
-            body.eq(&article.body),
+            slug.eq(slugify(&article.title)),
+            title.eq(&ammonia::clean(&article.title)),
+            description.eq(&ammonia::clean(&article.description)),
+            body.eq(&ammonia::clean(&article.body)),
             created_at.eq(diesel::dsl::now),
             updated_at.eq(diesel::dsl::now),
             author.eq(user_id),
@@ -131,12 +149,15 @@ pub fn create(conn: &DbConnection, article: &NewArticleData, user_id: i32) -> Db
     Ok(pg_article.to_article(profile, tag_list))
 }
 
-fn to_article(tuple: (PGArticle, Option<User>)) -> DbResult<Article> {
-    match tuple {
-        (pg, Some(user)) => Ok(pg.to_article(user.to_profile(false), vec![])),
-        (_, None) => Err(Error::DatabaseError(
-            "user".to_owned(),
-            "foreign key doesn't exist".to_owned(),
-        )),
-    }
+fn to_article((pg, user): (PGArticle, User)) -> DbResult<Article> {
+    Ok(pg.to_article(user.to_profile(false), vec![]))
+}
+
+fn slugify(title: &str) -> String {
+    format!("{}-{}", slug::slugify(title), generate_suffix(SUFFIX_LEN))
+}
+
+fn generate_suffix(len: usize) -> String {
+    let mut rng = thread_rng();
+    (0..len).map(|_| rng.sample(Alphanumeric)).collect()
 }

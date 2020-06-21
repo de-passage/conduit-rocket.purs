@@ -5,6 +5,7 @@ use crate::models::user::{AuthenticatedUser, Profile, User, UserUpdateData};
 use crate::schema;
 use crate::schema::followings;
 use crate::schema::users;
+use ammonia;
 use errors::Error;
 use scrypt;
 
@@ -39,9 +40,9 @@ pub fn create(
 
     diesel::insert_into(users::table)
         .values(NewUserData {
-            username: &username,
-            email: &email,
-            hash: &hash,
+            username: &ammonia::clean(&username),
+            email: &ammonia::clean(&email),
+            hash: &ammonia::clean(&hash),
         })
         .get_result(conn)
         .map_err(Into::into)
@@ -112,11 +113,11 @@ pub fn update(
     secret: &String,
 ) -> DbResult<AuthenticatedUser> {
     let data = UpdateUserData {
-        username: upd.username.clone(),
-        email: upd.username.clone(),
-        hash: upd.password.clone().and_then(|v| make_hash(v).ok()),
-        image: upd.image.clone(),
-        bio: upd.bio.clone(),
+        username: upd.username.clone().map(|a| ammonia::clean(&a)),
+        email: upd.username.clone().map(|a| ammonia::clean(&a)),
+        hash: upd.password.clone().clone().and_then(|v| make_hash(v).ok()),
+        image: upd.image.clone().map(|a| ammonia::clean(&a)),
+        bio: upd.bio.clone().map(|a| ammonia::clean(&a)),
     };
 
     diesel::update(users::table.filter(users::id.eq(id)))

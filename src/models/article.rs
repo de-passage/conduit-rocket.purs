@@ -70,7 +70,7 @@ pub struct NewArticleData {
     pub title: String,
     pub description: String,
     pub body: String,
-    #[serde(rename="tagList")]
+    #[serde(rename = "tagList")]
     pub tag_list: Option<Vec<String>>,
 }
 
@@ -79,7 +79,7 @@ pub struct UpdateArticleData {
     pub title: Option<String>,
     pub description: Option<String>,
     pub body: Option<String>,
-    #[serde(rename="tagList")]
+    #[serde(rename = "tagList")]
     pub tag_list: Option<Vec<String>>,
 }
 

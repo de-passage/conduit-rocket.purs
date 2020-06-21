@@ -48,7 +48,7 @@ pub fn article(conn: DbConnection, auth: Option<AuthData>, slug: String) -> DbRe
     db::articles::get_by_slug(&conn, auth.map(|a| a.id), &slug)
 }
 
-#[put("/articles/<slug>", data="<article>", format="json")]
+#[put("/articles/<slug>", data = "<article>", format = "json")]
 pub fn update_article(
     _conn: DbConnection,
     auth: AuthData,
@@ -59,11 +59,7 @@ pub fn update_article(
 }
 
 #[delete("/articles/<slug>")]
-pub fn delete_article(
-    _conn: DbConnection,
-    auth: AuthData,
-    slug: String,
-) -> String {
+pub fn delete_article(_conn: DbConnection, auth: AuthData, slug: String) -> String {
     format!["Hello, {}", slug]
 }
 

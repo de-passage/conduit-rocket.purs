@@ -22,29 +22,34 @@ impl From<result::Error> for Error {
 
 impl<'r> Responder<'r> for Error {
     fn respond_to(self, req: &Request) -> response::Result<'r> {
-        let (json, code) = dispatch_error(&self);
-        status::Custom(code, Json(json)).respond_to(req)
+        let (err, code) = dispatch_error(&self);
+        status::Custom(code, Json(json![{ "errors": err }])).respond_to(req)
     }
 }
 
-
 fn dispatch_error(error: &Error) -> (JsonValue, Status) {
-        match error {
-            Error::DatabaseError(key, value) => (json![{
-                    key: [value]
-            }], Status::UnprocessableEntity),
-            Error::InternalServerError(key, value) => (json![{
-                    key: value
-            }], Status::InternalServerError),
-            Error::AuthError() => (json![{
-                    "email or password": "is invalid"
-            }], Status::UnprocessableEntity),
-            Error::Unauthorized() => (json![{
-                "unauthorized": "you need to be logged in to access this resource"
-            }], Status::Unauthorized),
-            Error::Forbidden() => (json![{
-                "forbidden": "you are not allowed to access this resource"
-            }], Status::Forbidden)
+    match error {
+        Error::DatabaseError(key, value) => (json![{ key: [value] }], Status::UnprocessableEntity),
+        Error::InternalServerError(key, value) => {
+            (json![{ key: value }], Status::InternalServerError)
         }
-
+        Error::AuthError() => (
+            json![{
+                    "email or password": "is invalid"
+            }],
+            Status::UnprocessableEntity,
+        ),
+        Error::Unauthorized() => (
+            json![{
+                "unauthorized": "you need to be logged in to access this resource"
+            }],
+            Status::Unauthorized,
+        ),
+        Error::Forbidden() => (
+            json![{
+                "forbidden": "you are not allowed to access this resource"
+            }],
+            Status::Forbidden,
+        ),
+    }
 }

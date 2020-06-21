@@ -15,16 +15,12 @@ extern crate rocket_contrib;
 extern crate serde_derive;
 #[macro_use]
 extern crate diesel;
-extern crate jsonwebtoken;
-extern crate scrypt;
-extern crate chrono;
-extern crate percent_encoding;
 
 use crate::db::DbConnection;
+use crate::errors::Error;
 use rocket::Request;
 use rocket_cors;
-use rocket_cors::{CorsOptions};
-use crate::errors::Error;
+use rocket_cors::CorsOptions;
 
 #[get("/")]
 fn index() -> &'static str {
