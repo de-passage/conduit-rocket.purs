@@ -18,6 +18,7 @@ extern crate diesel;
 extern crate jsonwebtoken;
 extern crate scrypt;
 extern crate chrono;
+extern crate percent_encoding;
 
 use crate::db::DbConnection;
 use rocket::Request;

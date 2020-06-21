@@ -39,7 +39,7 @@ pub struct PGArticle {
 }
 
 impl PGArticle {
-    pub fn to_article(self, profile: Profile) -> Article {
+    pub fn to_article(self, profile: Profile, tag_list: Vec<String>) -> Article {
         let PGArticle {
             body,
             created_at,
@@ -59,7 +59,7 @@ impl PGArticle {
             created_at: format!["{:?}", created_at],
             updated_at: format!["{:?}", updated_at],
             favorited: false,
-            tag_list: vec![],
+            tag_list,
             author: profile,
         }
     }

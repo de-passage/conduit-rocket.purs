@@ -1,7 +1,6 @@
 use crate::authentication;
 use crate::db::DbResult;
 use crate::schema::users;
-use diesel::associations::{Identifiable, HasTable};
 
 #[derive(Serialize)]
 pub struct Username(pub String);

@@ -1,9 +1,14 @@
-use crate::db::DbConnection;
 use crate::authentication::AuthData;
-use crate::models;
-use crate::models::article::{TagList, Article, ArticleList};
 use crate::db;
+use crate::db::DbConnection;
+use crate::models::article::{Article, ArticleList, NewArticleData, TagList, UpdateArticleData};
 use db::DbResult;
+use rocket_contrib::json::Json;
+
+#[derive(Deserialize)]
+pub struct ArticleWrapper<T> {
+    article: T,
+}
 
 #[get("/articles?<tag>&<author>&<offset>&<limit>&<favorited>")]
 pub fn articles(
@@ -15,36 +20,50 @@ pub fn articles(
     limit: Option<u32>,
     favorited: Option<String>,
 ) -> DbResult<ArticleList> {
-    db::articles::articles(&conn, tag, author, offset, limit, favorited, auth.map(|a| a.id))
+    db::articles::articles(
+        &conn,
+        tag,
+        author,
+        offset,
+        limit,
+        favorited,
+        auth.map(|a| a.id),
+    )
 }
 
-#[post("/articles")]
-pub fn new_article(_conn: DbConnection) -> &'static str {
-    "Hello, world!"
+#[post("/articles", data = "<article>", format = "json")]
+pub fn new_article(
+    conn: DbConnection,
+    auth: AuthData,
+    article: Json<ArticleWrapper<NewArticleData>>,
+) -> DbResult<Article> {
+    db::articles::create(&conn, &article.article, auth.id)
 }
 
 #[get("/articles/feed?<limit>&<offset>")]
-pub fn feed(_conn: DbConnection, limit: Option<u32>, offset: Option<u32>) -> String {
-    let params = vec![limit, offset]
-        .into_iter()
-        .flat_map(|o| o.into_iter().map(|x| x.to_string()))
-        .collect::<Vec<_>>()
-        .join(", ");
-    format!("Hello, world?{}", params)
-}
+pub fn feed(_conn: DbConnection, limit: Option<u32>, offset: Option<u32>) {}
 
 #[get("/articles/<slug>")]
 pub fn article(conn: DbConnection, auth: Option<AuthData>, slug: String) -> DbResult<Article> {
     db::articles::get_by_slug(&conn, auth.map(|a| a.id), &slug)
 }
 
-#[put("/articles/<slug>")]
-pub fn update_article(_conn: DbConnection, slug: String) -> String {
+#[put("/articles/<slug>", data="<article>", format="json")]
+pub fn update_article(
+    _conn: DbConnection,
+    auth: AuthData,
+    slug: String,
+    article: Json<ArticleWrapper<UpdateArticleData>>,
+) -> String {
     format!["Hello, {}", slug]
 }
 
 #[delete("/articles/<slug>")]
-pub fn delete_article(_conn: DbConnection, slug: String) -> String {
+pub fn delete_article(
+    _conn: DbConnection,
+    auth: AuthData,
+    slug: String,
+) -> String {
     format!["Hello, {}", slug]
 }
 
