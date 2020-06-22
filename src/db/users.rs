@@ -61,7 +61,7 @@ pub fn authenticate(
         .map_err(Into::into)
         .and_then(|user: User| {
             scrypt::scrypt_check(password, &user.hash)
-                .map_err(|_| Error::AuthError())
+                .map_err(|_| Error::AuthError)
                 .and_then(|_| user.to_authenticated(secret))
         })
 }

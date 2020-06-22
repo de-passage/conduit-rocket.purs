@@ -9,9 +9,9 @@ use rocket_contrib::json::{Json, JsonValue};
 pub enum Error {
     DatabaseError(String, String),
     InternalServerError(String, String),
-    AuthError(),
-    Forbidden(),
-    Unauthorized(),
+    AuthError,
+    Forbidden,
+    Unauthorized,
 }
 
 impl From<result::Error> for Error {
@@ -33,19 +33,19 @@ fn dispatch_error(error: &Error) -> (JsonValue, Status) {
         Error::InternalServerError(key, value) => {
             (json![{ key: value }], Status::InternalServerError)
         }
-        Error::AuthError() => (
+        Error::AuthError => (
             json![{
                     "email or password": "is invalid"
             }],
             Status::UnprocessableEntity,
         ),
-        Error::Unauthorized() => (
+        Error::Unauthorized => (
             json![{
                 "unauthorized": "you need to be logged in to access this resource"
             }],
             Status::Unauthorized,
         ),
-        Error::Forbidden() => (
+        Error::Forbidden => (
             json![{
                 "forbidden": "you are not allowed to access this resource"
             }],

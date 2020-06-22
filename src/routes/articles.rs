@@ -41,11 +41,18 @@ pub fn new_article(
 }
 
 #[get("/articles/feed?<limit>&<offset>")]
-pub fn feed(_conn: DbConnection, limit: Option<u32>, offset: Option<u32>) {}
+pub fn feed(
+    conn: DbConnection,
+    auth: AuthData,
+    limit: Option<u32>,
+    offset: Option<u32>,
+) -> DbResult<ArticleList> {
+    db::articles::user_feed(&conn, auth.id, limit, offset)
+}
 
 #[get("/articles/<slug>")]
 pub fn article(conn: DbConnection, auth: Option<AuthData>, slug: String) -> DbResult<Article> {
-    db::articles::get_by_slug(&conn, auth.map(|a| a.id), &slug)
+    db::articles::article(&conn, auth.map(|a| a.id), &slug)
 }
 
 #[put("/articles/<slug>", data = "<article>", format = "json")]
@@ -64,13 +71,13 @@ pub fn delete_article(conn: DbConnection, auth: AuthData, slug: String) -> DbRes
 }
 
 #[post("/articles/<slug>/favorite")]
-pub fn favorite(_conn: DbConnection, slug: String) -> String {
-    format!["Hello, {}", slug]
+pub fn favorite(conn: DbConnection, auth: AuthData, slug: String) -> DbResult<Article> {
+    db::articles::favorite(&conn, auth.id, &slug)
 }
 
 #[delete("/articles/<slug>/favorite")]
-pub fn unfavorite(_conn: DbConnection, slug: String) -> String {
-    format!["Hello, {}", slug]
+pub fn unfavorite(conn: DbConnection, auth: AuthData, slug: String) -> DbResult<Article> {
+    db::articles::unfavorite(&conn, auth.id, &slug)
 }
 
 #[get("/tags")]

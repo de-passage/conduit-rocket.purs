@@ -29,12 +29,12 @@ fn index() -> &'static str {
 
 #[catch(401)]
 fn unauthorized(_: &Request) -> Error {
-    Error::Unauthorized()
+    Error::Unauthorized
 }
 
 #[catch(403)]
 fn forbidden(_: &Request) -> Error {
-    Error::Forbidden()
+    Error::Forbidden
 }
 
 fn cors_options() -> CorsOptions {
