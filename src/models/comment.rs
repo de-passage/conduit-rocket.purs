@@ -1,25 +1,58 @@
+use crate::format::encode_datetime;
 use crate::models::user;
 use chrono::NaiveDateTime;
+use rocket::response;
+use rocket::response::Responder;
+use rocket::Request;
 
 #[derive(Serialize)]
 pub struct Comment {
     pub id: i32,
     pub author: user::Profile,
-    pub createdAt: String,
-    pub updatedAt: String,
+    #[serde(rename = "createdAt")]
+    pub created_at: String,
+    #[serde(rename = "updatedAt")]
+    pub updated_at: String,
     pub body: String,
 }
 
 #[derive(Queryable)]
-pub struct CommentQuery { 
+pub struct CommentQuery {
     pub id: i32,
-    pub author: i32,
     pub body: String,
-    pub createdAt: NaiveDateTime,
-    pub updatedAt: NaiveDateTime,
+    pub user_id: i32,
+    pub article_id: i32,
+    pub created_at: NaiveDateTime,
+    pub updated_at: NaiveDateTime,
+}
+
+impl CommentQuery {
+    pub fn to_comment(self, author: user::Profile) -> Comment {
+        Comment {
+            id: self.id,
+            author,
+            body: self.body,
+            updated_at: encode_datetime(self.updated_at),
+            created_at: encode_datetime(self.created_at),
+        }
+    }
 }
 
 #[derive(Deserialize)]
 pub struct NewCommentData {
-    pub body: String
+    pub body: String,
+}
+
+pub struct CommentList(pub Vec<Comment>);
+
+impl<'r> Responder<'r> for CommentList {
+    fn respond_to(self, req: &Request) -> response::Result<'r> {
+        json![{ "comments": self.0 }].respond_to(req)
+    }
+}
+
+impl<'r> Responder<'r> for Comment {
+    fn respond_to(self, req: &Request) -> response::Result<'r> {
+        json![{ "comment": self }].respond_to(req)
+    }
 }

@@ -3,6 +3,7 @@
 mod authentication;
 mod db;
 mod errors;
+mod format;
 mod models;
 mod routes;
 mod schema;
