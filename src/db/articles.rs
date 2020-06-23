@@ -39,7 +39,7 @@ pub fn articles(
         .select((
             articles::all_columns(),
             users::table::all_columns(),
-            diesel::dsl::sql("array_agg(tags.tag) as tag_list"),
+            tags_as_array(),
         ))
         .group_by((id, users::id))
         .into_boxed();
@@ -295,7 +295,7 @@ fn to_article((pg, user, tags): (PGArticle, User, Option<Vec<String>>)) -> Artic
 }
 
 fn tags_as_array<ST>() -> diesel::expression::SqlLiteral<ST> {
-    diesel::dsl::sql("array_agg(tags.tag) as tag_list")
+    diesel::dsl::sql("array_agg(tags.tag) filter (where tags.tag is not null) as tag_list")
 }
 
 fn get_by_slug(
