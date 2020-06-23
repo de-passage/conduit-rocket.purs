@@ -58,11 +58,13 @@ pub fn authenticate(
     schema::users::table
         .filter(users::email.eq(email))
         .get_result(conn)
+        .optional()
         .map_err(Into::into)
-        .and_then(|user: User| {
-            scrypt::scrypt_check(password, &user.hash)
+        .and_then(|maybe_user: Option<User>| match maybe_user {
+            Some(user) => scrypt::scrypt_check(password, &user.hash)
                 .map_err(|_| Error::AuthError)
-                .and_then(|_| user.to_authenticated(secret))
+                .and_then(|_| user.to_authenticated(secret)),
+            None => Err(Error::ValidationFailed(json![{"email": "doesn't exist"}])),
         })
 }
 
