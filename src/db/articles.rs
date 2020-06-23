@@ -341,7 +341,7 @@ fn get_by_slug(
         .select((
             articles::all_columns(),
             users::table::all_columns(),
-            diesel::dsl::sql("array_agg(tags.tag) as tag_list"),
+            tags_as_array(),
         ))
         .group_by((id, users::id))
         .get_result::<(PGArticle, User, Option<Vec<String>>)>(conn)
