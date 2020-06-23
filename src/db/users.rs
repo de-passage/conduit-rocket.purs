@@ -116,7 +116,7 @@ pub fn update(
 ) -> DbResult<AuthenticatedUser> {
     let data = UpdateUserData {
         username: upd.username.clone().map(|a| ammonia::clean(&a)),
-        email: upd.username.clone().map(|a| ammonia::clean(&a)),
+        email: upd.email.clone().map(|a| ammonia::clean(&a)),
         hash: upd.password.clone().clone().and_then(|v| make_hash(v).ok()),
         image: upd.image.clone().map(|a| ammonia::clean(&a)),
         bio: upd.bio.clone().map(|a| ammonia::clean(&a)),
