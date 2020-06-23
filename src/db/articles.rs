@@ -215,7 +215,7 @@ pub fn favorite(conn: &DbConnection, favoriter: i32, fav: &String) -> DbResult<A
     if updated == 1 {
         Ok(to_article(art))
     } else {
-        Err(Error::DatabaseError(
+        Err(Error::InternalServerError(
             "article".to_owned(),
             "favorites_count update failed".to_owned(),
         ))
@@ -238,15 +238,15 @@ pub fn unfavorite(conn: &DbConnection, favoriter: i32, fav: &String) -> DbResult
         if updated == 1 {
             Ok(to_article(art))
         } else {
-            Err(Error::DatabaseError(
+            Err(Error::InternalServerError(
                 "article".to_owned(),
                 "favorites_count update failed".to_owned(),
             ))
         }
     } else {
-        Err(Error::DatabaseError(
+        Err(Error::ValidationFailed(
             "article".to_owned(),
-            "wasn't favorited".to_owned(),
+            vec!["wasn't favorited".to_owned()],
         ))
     }
 }

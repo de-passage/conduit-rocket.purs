@@ -138,7 +138,7 @@ pub fn follow(conn: &DbConnection, username: &String, id: i32) -> DbResult<Profi
             if inserted > 0 {
                 Ok(user.to_profile(true))
             } else {
-                Err(Error::DatabaseError(
+                Err(Error::InternalServerError(
                     "followings".to_owned(),
                     "couldn't follow user".to_owned(),
                 ))
@@ -154,9 +154,9 @@ pub fn unfollow(conn: &DbConnection, username: &String, id: i32) -> DbResult<Pro
         .map_err(Into::into)
         .and_then(|deleted| {
             if deleted != 1 {
-                Err(Error::DatabaseError(
+                Err(Error::ValidationFailed(
                     "followings".to_owned(),
-                    "couldn't unfollow user".to_owned(),
+                    vec!["couldn't unfollow user".to_owned()],
                 ))
             } else {
                 Ok(user.to_profile(false))

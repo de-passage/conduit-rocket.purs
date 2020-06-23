@@ -7,7 +7,8 @@ use rocket_contrib::json::{Json, JsonValue};
 
 #[derive(Debug)]
 pub enum Error {
-    DatabaseError(String, String),
+    DatabaseError(result::Error),
+    ValidationFailed(String, Vec<String>),
     InternalServerError(String, String),
     AuthError,
     Forbidden,
@@ -16,7 +17,7 @@ pub enum Error {
 
 impl From<result::Error> for Error {
     fn from(err: result::Error) -> Error {
-        Error::DatabaseError("database validation".to_owned(), err.to_string())
+        Error::DatabaseError(err)
     }
 }
 
@@ -27,9 +28,47 @@ impl<'r> Responder<'r> for Error {
     }
 }
 
+use diesel::result::Error::*;
+
 fn dispatch_error(error: &Error) -> (JsonValue, Status) {
     match error {
-        Error::DatabaseError(key, value) => (json![{ key: [value] }], Status::UnprocessableEntity),
+        Error::DatabaseError(err) => match err {
+            InvalidCString(null_err) => (
+                json![{
+                    "ill-formed query": format!["nul byte at position {}", null_err.nul_position()]
+                }],
+                Status::InternalServerError,
+            ),
+            DatabaseError(kind, info) => (make_error_msg(kind, info), Status::UnprocessableEntity),
+            NotFound => (
+                json![{"not found": "requested resource not found"}],
+                Status::NotFound,
+            ),
+            QueryBuilderError(err) => (
+                json![{"query builder": err.to_string()}],
+                Status::InternalServerError,
+            ),
+            DeserializationError(err) => (
+                json![{"deserialization": err.to_string()}],
+                Status::InternalServerError,
+            ),
+            SerializationError(err) => (
+                json![{"deserialization": err.to_string() }],
+                Status::InternalServerError,
+            ),
+            RollbackTransaction => (
+                json![{"rollback": "server-initiated rollback"}],
+                Status::InternalServerError,
+            ),
+            AlreadyInTransaction => (
+                json![{"already in transaction": "invalid operation within a transaction"}],
+                Status::InternalServerError,
+            ),
+            _ => (
+                json![{"database": "responded with unknown error code"}],
+                Status::InternalServerError,
+            ),
+        },
         Error::InternalServerError(key, value) => {
             (json![{ key: value }], Status::InternalServerError)
         }
@@ -51,5 +90,24 @@ fn dispatch_error(error: &Error) -> (JsonValue, Status) {
             }],
             Status::Forbidden,
         ),
+        Error::ValidationFailed(key, values) => {
+            (json![{ key: values }], Status::UnprocessableEntity)
+        }
     }
+}
+
+use diesel::result::{DatabaseErrorInformation, DatabaseErrorKind};
+fn make_error_msg(
+    kind: &DatabaseErrorKind,
+    info: &Box<dyn DatabaseErrorInformation + Send + Sync>,
+) -> JsonValue {
+    let table = info.table_name().unwrap_or("<unknown table>");
+    let col = info.column_name().unwrap_or("<unknown column>");
+    let key = format!["{} {}", table, col];
+    let value = match kind {
+        DatabaseErrorKind::UniqueViolation => "already exists",
+        DatabaseErrorKind::ForeignKeyViolation => "foreign key doesn't exist",
+        _ => "unhandled error occured",
+    };
+    json![{ key: [value] }]
 }
