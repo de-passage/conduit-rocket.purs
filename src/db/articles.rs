@@ -6,12 +6,44 @@ use crate::models::article::{
 use crate::models::user::{Profile, User};
 use crate::schema;
 use ammonia;
+use chrono::NaiveDateTime;
 use diesel::prelude::*;
+use diesel::sql_types::*;
 use errors::Error;
 use std::cmp::min;
 
 const LIMIT: u32 = 20;
 const MAX_LIMIT: i64 = 500;
+
+#[derive(QueryableByName)]
+struct ArticleQuery {
+    #[sql_type = "Text"]
+    article_slug: String,
+    #[sql_type = "Text"]
+    article_title: String,
+    #[sql_type = "Text"]
+    article_description: String,
+    #[sql_type = "Text"]
+    article_body: String,
+    #[sql_type = "Timestamptz"]
+    article_creation: NaiveDateTime,
+    #[sql_type = "Timestamptz"]
+    article_update: NaiveDateTime,
+    #[sql_type = "Text"]
+    author_username: String,
+    #[sql_type = "Nullable<Text>"]
+    author_bio: Option<String>,
+    #[sql_type = "Nullable<Text>"]
+    author_image: Option<String>,
+    #[sql_type = "Nullable<Array<Text>>"]
+    tags: Option<Vec<String>>,
+    #[sql_type = "Bool"]
+    is_favorite: bool,
+    #[sql_type = "Bool"]
+    is_followed: bool,
+    #[sql_type = "Integer"]
+    favorites_count: i32,
+}
 
 pub fn articles(
     conn: &DbConnection,
@@ -22,43 +54,33 @@ pub fn articles(
     m_favorited: Option<String>,
     current_user: Option<i32>,
 ) -> DbResult<ArticleList> {
-    use schema::article_tag_associations as atas;
-    use schema::articles::dsl::*;
-    use schema::tags;
-    use schema::users;
-
-    let mut query = articles
-        .inner_join(users::table)
-        .left_join(atas::table)
-        .left_join(tags::table.on(tags::id.eq(atas::tag_id)))
-        .left_join(schema::favorites::table)
-        .select((
-            articles::all_columns(),
-            users::table::all_columns(),
-            tags_as_array(),
-        ))
-        .group_by((id, users::id))
-        .into_boxed();
-    if let Some(auth) = m_author {
-        let author_id = users::table
-            .filter(users::username.eq(auth))
-            .select(users::id)
-            .get_result::<i32>(conn)
-            .map_err(Into::<Error>::into)?;
-        query = query.filter(author.eq(author_id));
-    }
-
-    query
-        .offset(m_offset.unwrap_or(0).into())
-        .limit(min(m_limit.unwrap_or(LIMIT).into(), MAX_LIMIT))
-        .order_by(created_at.desc())
+    let qwery = format![
+        "select * from get_articles({})",
+        current_user.map(|x| x.to_string()).unwrap_or_default()
+    ];
+    println!["executing {}", qwery];
+    diesel::dsl::sql_query(qwery)
         .load(conn)
         .map_err(Into::into)
         .map(|v| {
             ArticleList(
                 v.into_iter()
-                    .map(|(pg, user, tags): (PGArticle, User, Option<Vec<String>>)| {
-                        pg.to_article(user.to_profile(false), tags.unwrap_or(vec![]))
+                    .map(|aq: ArticleQuery| Article {
+                        author: Profile {
+                            username: aq.author_username,
+                            following: aq.is_followed,
+                            bio: aq.author_bio,
+                            image: aq.author_image,
+                        },
+                        title: aq.article_title,
+                        body: aq.article_body,
+                        description: aq.article_description,
+                        slug: aq.article_slug,
+                        created_at: format! {"{:}", aq.article_creation},
+                        updated_at: format!["{:?}", aq.article_update],
+                        tag_list: aq.tags.unwrap_or(vec![]),
+                        favorited: aq.is_favorite,
+                        favorites_count: aq.favorites_count,
                     })
                     .collect::<Vec<_>>(),
             )
@@ -136,7 +158,7 @@ pub fn create(conn: &DbConnection, article: &NewArticleData, user_id: i32) -> Db
         })
         .unwrap_or(Ok(vec![]))?;
 
-    Ok(pg_article.to_article(profile, tag_list))
+    Ok(pg_article.to_article(profile, tag_list, false))
 }
 
 pub fn delete(conn: &DbConnection, user_id: i32, to_delete: &String) -> DbResult<Article> {
@@ -290,7 +312,7 @@ pub fn user_feed(
 }
 
 fn to_article((pg, user, tags): (PGArticle, User, Option<Vec<String>>)) -> Article {
-    pg.to_article(user.to_profile(false), tags.unwrap_or(vec![]))
+    pg.to_article(user.to_profile(false), tags.unwrap_or(vec![]), false)
 }
 
 fn tags_as_array<ST>() -> diesel::expression::SqlLiteral<ST> {

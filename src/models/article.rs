@@ -6,10 +6,6 @@ use rocket::response::Responder;
 use rocket::Request;
 use slug;
 
-use diesel::backend::Backend;
-use diesel::deserialize::{self, FromSql};
-use diesel::serialize::{self, IsNull, Output, ToSql};
-use diesel::sql_types::Text;
 use rand::distributions::Alphanumeric;
 use rand::*;
 const SUFFIX_LEN: usize = 8;
@@ -48,7 +44,7 @@ pub struct PGArticle {
 }
 
 impl PGArticle {
-    pub fn to_article(self, profile: Profile, tag_list: Vec<String>) -> Article {
+    pub fn to_article(self, profile: Profile, tag_list: Vec<String>, favorited: bool) -> Article {
         let PGArticle {
             body,
             created_at,
@@ -67,7 +63,7 @@ impl PGArticle {
             favorites_count,
             created_at: format!["{:?}", created_at],
             updated_at: format!["{:?}", updated_at],
-            favorited: false,
+            favorited,
             tag_list,
             author: profile,
         }
@@ -111,20 +107,6 @@ impl<'r> Responder<'r> for ArticleList {
 impl<'r> Responder<'r> for Article {
     fn respond_to(self, req: &Request) -> response::Result<'r> {
         json![{ "article": self }].respond_to(req)
-    }
-}
-
-#[derive(Debug, PartialEq, FromSqlRow, AsExpression)]
-struct Slug(String);
-
-impl<DB> FromSql<Text, DB> for Slug
-where
-    DB: Backend,
-    String: FromSql<Text, DB>,
-{
-    fn from_sql(bytes: Option<&DB::RawValue>) -> deserialize::Result<Self> {
-        let r = String::from_sql(bytes)?;
-        Ok(Slug(r))
     }
 }
 
