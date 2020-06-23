@@ -55,8 +55,12 @@ pub fn articles(
     current_user: Option<i32>,
 ) -> DbResult<ArticleList> {
     let qwery = format![
-        "select * from get_articles({})",
-        current_user.map(|x| x.to_string()).unwrap_or_default()
+        "select * from get_articles({}, {}, {})",
+        m_limit.unwrap_or(LIMIT),
+        m_offset.unwrap_or(0),
+        current_user
+            .map(|x| x.to_string())
+            .unwrap_or("NULL".to_string()),
     ];
     println!["executing {}", qwery];
     diesel::dsl::sql_query(qwery)

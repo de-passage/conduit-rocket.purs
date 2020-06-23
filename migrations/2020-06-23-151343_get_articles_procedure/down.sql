@@ -1,3 +1,3 @@
 -- This file should undo anything in `up.sql`
 
-DROP FUNCTION get_articles(INTEGER);
+DROP FUNCTION get_articles;
