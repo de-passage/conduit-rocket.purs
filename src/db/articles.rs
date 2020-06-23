@@ -244,9 +244,9 @@ pub fn unfavorite(conn: &DbConnection, favoriter: i32, fav: &String) -> DbResult
             ))
         }
     } else {
-        Err(Error::ValidationFailed(
+        Err(Error::InternalServerError(
             "article".to_owned(),
-            vec!["wasn't favorited".to_owned()],
+            "wasn't favorited".to_owned(),
         ))
     }
 }

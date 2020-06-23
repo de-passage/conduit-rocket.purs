@@ -8,7 +8,7 @@ use rocket_contrib::json::{Json, JsonValue};
 #[derive(Debug)]
 pub enum Error {
     DatabaseError(result::Error),
-    ValidationFailed(String, Vec<String>),
+    ValidationFailed(JsonValue),
     InternalServerError(String, String),
     AuthError,
     Forbidden,
@@ -23,14 +23,14 @@ impl From<result::Error> for Error {
 
 impl<'r> Responder<'r> for Error {
     fn respond_to(self, req: &Request) -> response::Result<'r> {
-        let (err, code) = dispatch_error(&self);
+        let (err, code) = dispatch_error(self);
         status::Custom(code, Json(json![{ "errors": err }])).respond_to(req)
     }
 }
 
 use diesel::result::Error::*;
 
-fn dispatch_error(error: &Error) -> (JsonValue, Status) {
+fn dispatch_error(error: Error) -> (JsonValue, Status) {
     match error {
         Error::DatabaseError(err) => match err {
             InvalidCString(null_err) => (
@@ -90,16 +90,14 @@ fn dispatch_error(error: &Error) -> (JsonValue, Status) {
             }],
             Status::Forbidden,
         ),
-        Error::ValidationFailed(key, values) => {
-            (json![{ key: values }], Status::UnprocessableEntity)
-        }
+        Error::ValidationFailed(value) => (value, Status::UnprocessableEntity),
     }
 }
 
 use diesel::result::{DatabaseErrorInformation, DatabaseErrorKind};
 fn make_error_msg(
-    kind: &DatabaseErrorKind,
-    info: &Box<dyn DatabaseErrorInformation + Send + Sync>,
+    kind: DatabaseErrorKind,
+    info: Box<dyn DatabaseErrorInformation + Send + Sync>,
 ) -> JsonValue {
     let table = info.table_name().unwrap_or("<unknown table>");
     let col = info.column_name().unwrap_or("<unknown column>");

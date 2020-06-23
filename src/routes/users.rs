@@ -1,7 +1,9 @@
 use crate::authentication::AuthData;
 use crate::db;
 use crate::db::{DbConnection, DbResult};
+use crate::errors::Error;
 use crate::models::user::*;
+use regex;
 use rocket::response;
 use rocket::response::Responder;
 use rocket::Request;
@@ -40,18 +42,46 @@ pub fn login(
     )
 }
 
-#[post("/users", data = "<user>", format = "json")]
+#[post("/users", data = "<data>", format = "json")]
 pub fn register(
     conn: DbConnection,
-    user: Json<UserWrapper<NewUserData>>,
+    data: Json<UserWrapper<NewUserData>>,
 ) -> DbResult<AuthenticatedUser> {
-    db::users::create(
-        &conn,
-        &user.user.username,
-        &user.user.email,
-        user.user.password.clone(),
-        &"secret".to_owned(),
-    )
+    let user = &data.user;
+    let mut errors = json![{}];
+    let mut error = false;
+
+    if user.username.is_empty() {
+        errors["username"] = json!("is empty").0;
+        error = true;
+    }
+
+    let regex = email_regex()?;
+
+    if user.email.is_empty() {
+        errors["email"] = json!["is empty"].0;
+        error = true;
+    } else if !regex.is_match(&user.email) {
+        errors["email"] = json!["is invalid"].0;
+        error = true;
+    }
+
+    if user.password.is_empty() {
+        errors["password"] = json!["is empty"].0;
+        error = true;
+    }
+
+    if error {
+        Err(Error::ValidationFailed(errors))
+    } else {
+        db::users::create(
+            &conn,
+            &user.username,
+            &user.email,
+            user.password.clone(),
+            &"secret".to_owned(),
+        )
+    }
 }
 
 #[get("/user")]
@@ -59,13 +89,52 @@ pub fn current_user(conn: DbConnection, auth: AuthData) -> DbResult<Authenticate
     db::users::find_by_id(&conn, auth.id).and_then(|u| u.to_authenticated(&"secret".to_owned()))
 }
 
-#[put("/user", data = "<user>", format = "json")]
+#[put("/user", data = "<data>", format = "json")]
 pub fn update_current_user(
     conn: DbConnection,
     auth: AuthData,
-    user: Json<UserWrapper<UserUpdateData>>,
+    data: Json<UserWrapper<UserUpdateData>>,
 ) -> DbResult<AuthenticatedUser> {
-    db::users::update(&conn, auth.id, &user.user, &"secret".to_owned())
+    let user = &data.user;
+    let mut error = false;
+    let mut errors = json![{}];
+    match &user.username {
+        Some(username) => {
+            if username.is_empty() {
+                errors["username"] = json!["is empty"].0;
+                error = true;
+            }
+        }
+        None => (),
+    }
+    let regex = email_regex()?;
+    match &user.email {
+        Some(email) => {
+            if email.is_empty() {
+                errors["email"] = json!["is empty"].0;
+                error = true;
+            } else if !regex.is_match(&email) {
+                errors["email"] = json!["is invalid"].0;
+                error = true;
+            }
+        }
+        None => (),
+    }
+
+    match &user.password {
+        Some(password) => {
+            if password.is_empty() {
+                errors["password"] = json!["is empty"].0;
+            }
+        }
+        None => (),
+    }
+
+    if error {
+        Err(Error::ValidationFailed(errors))
+    } else {
+        db::users::update(&conn, auth.id, &user, &"secret".to_owned())
+    }
 }
 
 #[get("/profiles/<username>")]
@@ -81,4 +150,9 @@ pub fn follow(conn: DbConnection, username: String, auth: AuthData) -> DbResult<
 #[delete("/profiles/<username>/follow")]
 pub fn unfollow(conn: DbConnection, username: String, auth: AuthData) -> DbResult<Profile> {
     db::users::unfollow(&conn, &username, auth.id)
+}
+
+fn email_regex() -> DbResult<regex::Regex> {
+    regex::Regex::new(r"^([a-zA-Z0-9_\-\.]+)@([a-zA-Z0-9_\-\.]+)\.([a-zA-Z]{2,5})$")
+        .map_err(|err| Error::InternalServerError("email regex".to_owned(), err.to_string()))
 }

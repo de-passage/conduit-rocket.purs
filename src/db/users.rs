@@ -154,9 +154,9 @@ pub fn unfollow(conn: &DbConnection, username: &String, id: i32) -> DbResult<Pro
         .map_err(Into::into)
         .and_then(|deleted| {
             if deleted != 1 {
-                Err(Error::ValidationFailed(
+                Err(Error::InternalServerError(
                     "followings".to_owned(),
-                    vec!["couldn't unfollow user".to_owned()],
+                    "couldn't unfollow user".to_owned(),
                 ))
             } else {
                 Ok(user.to_profile(false))

@@ -1,6 +1,7 @@
 use crate::authentication::AuthData;
 use crate::db;
 use crate::db::{DbConnection, DbResult};
+use crate::errors::Error;
 use crate::models::comment::{Comment, CommentList, NewCommentData};
 use rocket_contrib::json::Json;
 
@@ -21,7 +22,11 @@ pub fn new_comment(
     slug: String,
     comment: Json<CommentWrapper>,
 ) -> DbResult<Comment> {
-    db::comments::create(&conn, auth.id, &slug, &comment.comment)
+    if comment.comment.body.is_empty() {
+        Err(Error::ValidationFailed(json![{"body": "is empty"}]))
+    } else {
+        db::comments::create(&conn, auth.id, &slug, &comment.comment)
+    }
 }
 
 #[delete("/articles/<slug>/comments/<comment_id>")]

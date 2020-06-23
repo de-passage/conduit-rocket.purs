@@ -1,6 +1,7 @@
 use crate::authentication::AuthData;
 use crate::db;
 use crate::db::DbConnection;
+use crate::errors::Error;
 use crate::models::article::{Article, ArticleList, NewArticleData, TagList, UpdateArticleData};
 use db::DbResult;
 use rocket_contrib::json::Json;
@@ -31,13 +32,33 @@ pub fn articles(
     )
 }
 
-#[post("/articles", data = "<article>", format = "json")]
+#[post("/articles", data = "<data>", format = "json")]
 pub fn new_article(
     conn: DbConnection,
     auth: AuthData,
-    article: Json<ArticleWrapper<NewArticleData>>,
+    data: Json<ArticleWrapper<NewArticleData>>,
 ) -> DbResult<Article> {
-    db::articles::create(&conn, &article.article, auth.id)
+    let article = &data.article;
+    let mut errors = json![{}];
+    let mut error = false;
+    if article.body.is_empty() {
+        errors["body"] = json!["is empty"].0;
+        error = true;
+    }
+    if article.description.is_empty() {
+        errors["description"] = json!["is empty"].0;
+        error = true;
+    }
+    if article.title.is_empty() {
+        errors["title"] = json!["is empty"].0;
+        error = true;
+    }
+
+    if error {
+        Err(Error::ValidationFailed(errors))
+    } else {
+        db::articles::create(&conn, &article, auth.id)
+    }
 }
 
 #[get("/articles/feed?<limit>&<offset>")]
@@ -55,14 +76,49 @@ pub fn article(conn: DbConnection, auth: Option<AuthData>, slug: String) -> DbRe
     db::articles::article(&conn, auth.map(|a| a.id), &slug)
 }
 
-#[put("/articles/<slug>", data = "<article>", format = "json")]
+#[put("/articles/<slug>", data = "<data>", format = "json")]
 pub fn update_article(
     conn: DbConnection,
     auth: AuthData,
     slug: String,
-    article: Json<ArticleWrapper<UpdateArticleData>>,
+    data: Json<ArticleWrapper<UpdateArticleData>>,
 ) -> DbResult<Article> {
-    db::articles::update(&conn, auth.id, slug, &article.article)
+    let article = &data.article;
+    let mut errors = json![{}];
+    let mut error = false;
+    match &article.body {
+        Some(body) => {
+            if body.is_empty() {
+                errors["body"] = json!["is empty"].0;
+                error = true;
+            }
+        }
+        None => (),
+    };
+    match &article.description {
+        Some(description) => {
+            if description.is_empty() {
+                errors["description"] = json!["is empty"].0;
+                error = true;
+            }
+        }
+        None => (),
+    };
+    match &article.title {
+        Some(title) => {
+            if title.is_empty() {
+                errors["title"] = json!["is empty"].0;
+                error = true;
+            }
+        }
+        None => (),
+    };
+
+    if error {
+        Err(Error::ValidationFailed(errors))
+    } else {
+        db::articles::update(&conn, auth.id, slug, &article)
+    }
 }
 
 #[delete("/articles/<slug>")]
