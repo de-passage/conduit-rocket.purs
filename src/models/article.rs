@@ -4,6 +4,15 @@ use chrono::NaiveDateTime;
 use rocket::response;
 use rocket::response::Responder;
 use rocket::Request;
+use slug;
+
+use diesel::backend::Backend;
+use diesel::deserialize::{self, FromSql};
+use diesel::serialize::{self, IsNull, Output, ToSql};
+use diesel::sql_types::Text;
+use rand::distributions::Alphanumeric;
+use rand::*;
+const SUFFIX_LEN: usize = 8;
 
 #[derive(Serialize)]
 pub struct Article {
@@ -103,4 +112,27 @@ impl<'r> Responder<'r> for Article {
     fn respond_to(self, req: &Request) -> response::Result<'r> {
         json![{ "article": self }].respond_to(req)
     }
+}
+
+#[derive(Debug, PartialEq, FromSqlRow, AsExpression)]
+struct Slug(String);
+
+impl<DB> FromSql<Text, DB> for Slug
+where
+    DB: Backend,
+    String: FromSql<Text, DB>,
+{
+    fn from_sql(bytes: Option<&DB::RawValue>) -> deserialize::Result<Self> {
+        let r = String::from_sql(bytes)?;
+        Ok(Slug(r))
+    }
+}
+
+pub fn slugify(title: &str) -> String {
+    format!("{}-{}", slug::slugify(title), generate_suffix(SUFFIX_LEN))
+}
+
+fn generate_suffix(len: usize) -> String {
+    let mut rng = thread_rng();
+    (0..len).map(|_| rng.sample(Alphanumeric)).collect()
 }

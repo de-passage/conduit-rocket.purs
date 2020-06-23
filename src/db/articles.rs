@@ -1,21 +1,17 @@
 use crate::db::{DbConnection, DbResult};
 use crate::errors;
 use crate::models::article::{
-    Article, ArticleList, NewArticleData, PGArticle, TagList, UpdateArticleData,
+    slugify, Article, ArticleList, NewArticleData, PGArticle, TagList, UpdateArticleData,
 };
 use crate::models::user::{Profile, User};
 use crate::schema;
 use ammonia;
 use diesel::prelude::*;
 use errors::Error;
-use rand::distributions::Alphanumeric;
-use rand::*;
-use slug;
 use std::cmp::min;
 
 const LIMIT: u32 = 20;
 const MAX_LIMIT: i64 = 500;
-const SUFFIX_LEN: usize = 8;
 
 pub fn articles(
     conn: &DbConnection,
@@ -178,12 +174,24 @@ pub fn update(
     data: &UpdateArticleData,
 ) -> DbResult<Article> {
     use schema::articles::dsl::*;
-    let art_id: i32 = articles
+    let (art_id, art_title): (i32, String) = articles
         .filter(slug.eq(&to_update).and(author.eq(user_id)))
-        .select(id)
+        .select((id, title))
         .get_result(conn)
-        .map_err(|_| Error::Forbidden)?;
-    let new_slug = data.title.clone().map(|a| ammonia::clean(&a));
+        .optional()
+        .map_err(Into::<Error>::into)
+        .and_then(|art: Option<(i32, String)>| match art {
+            Some(r) => Ok(r),
+            None => Err(Error::Forbidden),
+        })?;
+    let new_slug = data.title.as_ref().and_then(|a| {
+        let t = ammonia::clean(&a);
+        if t == art_title {
+            None
+        } else {
+            Some(slugify(&a))
+        }
+    });
     diesel::update(articles)
         .filter(id.eq(art_id))
         .set((
@@ -279,15 +287,6 @@ pub fn user_feed(
         .get_results::<(PGArticle, User, Option<Vec<String>>)>(conn)
         .map(|v| ArticleList(v.into_iter().map(to_article).collect::<Vec<Article>>()))
         .map_err(Into::<Error>::into)
-}
-
-fn slugify(title: &str) -> String {
-    format!("{}-{}", slug::slugify(title), generate_suffix(SUFFIX_LEN))
-}
-
-fn generate_suffix(len: usize) -> String {
-    let mut rng = thread_rng();
-    (0..len).map(|_| rng.sample(Alphanumeric)).collect()
 }
 
 fn to_article((pg, user, tags): (PGArticle, User, Option<Vec<String>>)) -> Article {
