@@ -43,11 +43,14 @@ pub struct NewCommentData {
     pub body: String,
 }
 
-pub struct CommentList(pub Vec<Comment>);
+pub struct CommentList {
+    pub comments: Vec<Comment>,
+    pub comments_count: i64,
+}
 
 impl<'r> Responder<'r> for CommentList {
     fn respond_to(self, req: &Request) -> response::Result<'r> {
-        json![{ "comments": self.0 }].respond_to(req)
+        json![{ "comments": self.comments, "commentsCount": self.comments_count }].respond_to(req)
     }
 }
 

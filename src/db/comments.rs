@@ -2,42 +2,61 @@ use crate::db;
 use crate::db::{DbConnection, DbResult};
 use crate::errors::Error;
 use crate::models::comment::*;
-use crate::models::user::{Profile, User};
+use crate::models::user::Profile;
 use crate::schema;
 use ammonia;
+use chrono::NaiveDateTime;
 use diesel::prelude::*;
+use diesel::sql_types::*;
+
+#[derive(QueryableByName)]
+struct CommentQ {
+    #[sql_type = "Integer"]
+    comment_id: i32,
+    #[sql_type = "Text"]
+    comment_body: String,
+    #[sql_type = "Timestamptz"]
+    comment_creation: NaiveDateTime,
+    #[sql_type = "Timestamptz"]
+    comment_update: NaiveDateTime,
+    #[sql_type = "Text"]
+    author_username: String,
+    #[sql_type = "Nullable<Text>"]
+    author_bio: Option<String>,
+    #[sql_type = "Nullable<Text>"]
+    author_image: Option<String>,
+    #[sql_type = "Bool"]
+    is_followed: bool,
+    #[sql_type = "BigInt"]
+    total_comments: i64,
+}
 
 pub fn for_article(conn: &DbConnection, user: Option<i32>, slug: &String) -> DbResult<CommentList> {
-    use schema::articles;
-    use schema::comments::dsl::*;
-    use schema::followings;
-    use schema::users;
-    comments
-        .inner_join(users::table)
-        .inner_join(articles::table)
-        .select((comments::all_columns(), users::all_columns))
-        .get_results::<(CommentQuery, User)>(conn)
-        .map_err(Into::<Error>::into)
-        .map(|v: Vec<(CommentQuery, User)>| {
-            CommentList(
-                v.into_iter()
-                    .map(|(comment, user): (CommentQuery, User)| {
-                        comment.to_comment(user.to_profile(false))
-                    })
-                    .collect::<Vec<_>>(),
-            )
-        })
-    /*
-    .inner_join(articles::table)
-    .inner_join(users::table)
-    .left_join(
-        followings::table.on(users::id
-            .eq(followings::followed_id)
-            .and(followings::follower_id.eq(user))),
-    )
-    .select((all_columns(), users::all_columns()))
-    .order_by(created_at.desc())
-    */
+    diesel::dsl::sql_query(format![
+        "select * from get_comments('{}', {})",
+        slug,
+        user.map(|x| x.to_string()).unwrap_or("NULL".to_owned()),
+    ])
+    .get_results::<CommentQ>(conn)
+    .map_err(Into::<Error>::into)
+    .map(|v: Vec<CommentQ>| CommentList {
+        comments_count: (&v).first().map(|x| x.total_comments).unwrap_or(0),
+        comments: v
+            .into_iter()
+            .map(|comment: CommentQ| Comment {
+                id: comment.comment_id,
+                body: comment.comment_body,
+                created_at: format!["{:?}", comment.comment_creation],
+                updated_at: format!["{:?}", comment.comment_update],
+                author: Profile {
+                    username: comment.author_username,
+                    bio: comment.author_bio,
+                    image: comment.author_image,
+                    following: comment.is_followed,
+                },
+            })
+            .collect::<Vec<_>>(),
+    })
 }
 
 pub fn create(
