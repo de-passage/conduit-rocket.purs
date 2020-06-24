@@ -37,6 +37,7 @@ select articles.slug as article_slug,
 	left join tags on atas.tag_id = tags.id
 	left join favorites on favorites.article_id = articles.id and favorites.user_id = feed_user_id
 	inner join followings on followings.followed_id = articles.author and followings.follower_id = feed_user_id
-	group by articles.id, users.id;
+	group by articles.id, users.id
+    order by articles.created_at DESC;
 END; 
 $$ LANGUAGE 'plpgsql';

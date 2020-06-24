@@ -13,7 +13,7 @@ use errors::Error;
 use std::cmp::min;
 
 const LIMIT: u32 = 20;
-const MAX_LIMIT: i64 = 500;
+const MAX_LIMIT: u32 = 500;
 
 #[derive(QueryableByName)]
 struct ArticleQuery {
@@ -281,36 +281,21 @@ pub fn user_feed(
     limit: Option<u32>,
     offset: Option<u32>,
 ) -> DbResult<ArticleList> {
-    use schema::article_tag_associations as atas;
-    use schema::articles::dsl::*;
-    use schema::followings;
-    use schema::tags;
-    use schema::users;
-    articles
-        .inner_join(users::table)
-        .left_join(followings::table.on(users::id.eq(followings::followed_id)))
-        .left_join(atas::table)
-        .left_join(tags::table.on(atas::tag_id.eq(tags::id)))
-        .filter(followings::follower_id.eq(user_id))
-        .select((
-            articles::all_columns(),
-            users::table::all_columns(),
-            tags_as_array(),
-        ))
-        .group_by((id, users::id))
-        .limit(min(limit.unwrap_or(LIMIT).into(), MAX_LIMIT))
-        .offset(offset.unwrap_or(0).into())
-        .get_results::<(PGArticle, User, Option<Vec<String>>)>(conn)
-        .map(|v| ArticleList(v.into_iter().map(to_article).collect::<Vec<Article>>()))
-        .map_err(Into::<Error>::into)
-}
-
-fn to_article((pg, user, tags): (PGArticle, User, Option<Vec<String>>)) -> Article {
-    pg.to_article(user.to_profile(false), tags.unwrap_or(vec![]), false)
-}
-
-fn tags_as_array<ST>() -> diesel::expression::SqlLiteral<ST> {
-    diesel::dsl::sql("array_agg(tags.tag) filter (where tags.tag is not null) as tag_list")
+    diesel::dsl::sql_query(format![
+        "select * from user_feed({}, {}, {})",
+        user_id,
+        min(limit.unwrap_or(LIMIT), MAX_LIMIT),
+        offset.unwrap_or(0)
+    ])
+    .get_results::<ArticleQuery>(conn)
+    .map(|v| {
+        ArticleList(
+            v.into_iter()
+                .map(from_article_query)
+                .collect::<Vec<Article>>(),
+        )
+    })
+    .map_err(Into::<Error>::into)
 }
 
 fn get_by_slug(
