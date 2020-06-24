@@ -55,14 +55,14 @@ pub fn articles(
     current_user: Option<i32>,
 ) -> DbResult<ArticleList> {
     let qwery = format![
-        "select * from get_articles({}, {}, {})",
+        "select * from get_articles({}, {}, {}, {}, {}, {})",
         m_limit.unwrap_or(LIMIT),
         m_offset.unwrap_or(0),
-        current_user
-            .map(|x| x.to_string())
-            .unwrap_or("NULL".to_string()),
+        current_user.map(|x| x.to_string()).unwrap_or(null()),
+        quote_option(m_tag),
+        quote_option(m_favorited),
+        quote_option(m_author)
     ];
-    println!["executing {}", qwery];
     diesel::dsl::sql_query(qwery)
         .load(conn)
         .map_err(Into::into)
@@ -346,4 +346,12 @@ fn get_by_slug(
         .group_by((id, users::id))
         .get_result::<(PGArticle, User, Option<Vec<String>>)>(conn)
         .map_err(Into::into)
+}
+
+fn null() -> String {
+    "NULL".to_owned()
+}
+
+fn quote_option(o: Option<String>) -> String {
+    o.map(|s| format!["'{}'", s]).unwrap_or(null())
 }
