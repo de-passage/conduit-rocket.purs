@@ -102,7 +102,7 @@ end if;
 RETURN QUERY 
 SELECT * 
 FROM select_articles(maybe_user_id, maybe_favorited , maybe_author) as results
-WHERE results.tags @> match
+WHERE results.tags IS NULL OR results.tags @> match
 ORDER BY results.article_creation DESC
 LIMIT a_limit 
 OFFSET a_offset;

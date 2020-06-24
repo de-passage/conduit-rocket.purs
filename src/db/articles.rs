@@ -83,7 +83,7 @@ pub fn article(
     current_user: Option<i32>,
     search: &String,
 ) -> DbResult<Article> {
-    get_by_slug(conn, current_user, search).map(to_article)
+    get_by_slug(conn, current_user, search)
 }
 
 pub fn create(conn: &DbConnection, article: &NewArticleData, user_id: i32) -> DbResult<Article> {
@@ -153,7 +153,7 @@ pub fn delete(conn: &DbConnection, user_id: i32, to_delete: &String) -> DbResult
     if author_id != user_id {
         return Err(Error::Unauthorized);
     }
-    let artcl = get_by_slug(conn, Some(user_id), to_delete).map(to_article)?;
+    let artcl = get_by_slug(conn, Some(user_id), to_delete)?;
     diesel::delete(articles)
         .filter(id.eq(art_id))
         .execute(conn)
@@ -209,23 +209,29 @@ pub fn update(
         ))
         .execute(conn)
         .map_err(Into::<Error>::into)?;
-    get_by_slug(conn, Some(user_id), &new_slug.unwrap_or(to_update)).map(to_article)
+    get_by_slug(conn, Some(user_id), &new_slug.unwrap_or(to_update))
 }
 
 pub fn favorite(conn: &DbConnection, favoriter: i32, fav: &String) -> DbResult<Article> {
     let mut art = get_by_slug(conn, Some(favoriter), fav)?;
+    let a_id: i32 = articles::table
+        .filter(articles::slug.eq(fav))
+        .select(articles::id)
+        .first(conn)
+        .map_err(Into::<Error>::into)?;
     use schema::favorites::dsl::*;
     diesel::insert_into(favorites)
-        .values((user_id.eq(favoriter), article_id.eq(art.0.id)))
+        .values((user_id.eq(favoriter), article_id.eq(a_id)))
         .execute(conn)
         .map_err(Into::<Error>::into)?;
-    art.0.favorites_count += 1;
+    art.favorites_count += 1;
+    art.favorited = true;
     let updated = diesel::update(articles::table)
-        .filter(articles::id.eq(art.0.id))
-        .set(articles::favorites_count.eq(art.0.favorites_count))
+        .filter(articles::id.eq(a_id))
+        .set(articles::favorites_count.eq(art.favorites_count))
         .execute(conn)?;
     if updated == 1 {
-        Ok(to_article(art))
+        Ok(art)
     } else {
         Err(Error::InternalServerError(
             "article".to_owned(),
@@ -237,18 +243,24 @@ pub fn favorite(conn: &DbConnection, favoriter: i32, fav: &String) -> DbResult<A
 pub fn unfavorite(conn: &DbConnection, favoriter: i32, fav: &String) -> DbResult<Article> {
     let mut art = get_by_slug(conn, Some(favoriter), fav)?;
     use schema::favorites::dsl::*;
+    let a_id: i32 = articles::table
+        .filter(articles::slug.eq(fav))
+        .select(articles::id)
+        .first(conn)
+        .map_err(Into::<Error>::into)?;
     let deleted = diesel::delete(favorites)
-        .filter(user_id.eq(favoriter).and(article_id.eq(art.0.id)))
+        .filter(user_id.eq(favoriter).and(article_id.eq(a_id)))
         .execute(conn)
         .map_err(Into::<Error>::into)?;
     if deleted > 0 {
-        art.0.favorites_count -= 1;
+        art.favorites_count -= 1;
+        art.favorited = false;
         let updated = diesel::update(articles::table)
-            .filter(articles::id.eq(art.0.id))
-            .set(articles::favorites_count.eq(art.0.favorites_count))
+            .filter(articles::id.eq(a_id))
+            .set(articles::favorites_count.eq(art.favorites_count))
             .execute(conn)?;
         if updated == 1 {
-            Ok(to_article(art))
+            Ok(art)
         } else {
             Err(Error::InternalServerError(
                 "article".to_owned(),
@@ -305,31 +317,22 @@ fn get_by_slug(
     conn: &DbConnection,
     current_user: Option<i32>,
     search: &String,
-) -> DbResult<(PGArticle, User, Option<Vec<String>>)> {
-    use schema::article_tag_associations as atas;
-    use schema::articles::dsl::*;
-    use schema::tags;
-    use schema::users;
-    articles
-        .filter(slug.eq(search))
-        .inner_join(users::table)
-        .left_join(atas::table)
-        .left_join(tags::table.on(tags::id.eq(atas::tag_id)))
-        .select((
-            articles::all_columns(),
-            users::table::all_columns(),
-            tags_as_array(),
-        ))
-        .group_by((id, users::id))
-        .get_result::<(PGArticle, User, Option<Vec<String>>)>(conn)
-        .map_err(Into::into)
+) -> DbResult<Article> {
+    diesel::dsl::sql_query(format![
+        "select * from select_articles({}, NULL, NULL) as results WHERE results.article_slug = '{}' LIMIT 1",
+        quote_option(current_user),
+        search
+    ])
+    .get_result::<ArticleQuery>(conn)
+    .map_err(Into::into)
+    .map(from_article_query)
 }
 
 fn null() -> String {
     "NULL".to_owned()
 }
 
-fn quote_option(o: Option<String>) -> String {
+fn quote_option<T: std::fmt::Display>(o: Option<T>) -> String {
     o.map(|s| format!["'{}'", s]).unwrap_or(null())
 }
 
