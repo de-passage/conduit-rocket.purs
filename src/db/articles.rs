@@ -66,29 +66,7 @@ pub fn articles(
     diesel::dsl::sql_query(qwery)
         .load(conn)
         .map_err(Into::into)
-        .map(|v| {
-            ArticleList(
-                v.into_iter()
-                    .map(|aq: ArticleQuery| Article {
-                        author: Profile {
-                            username: aq.author_username,
-                            following: aq.is_followed,
-                            bio: aq.author_bio,
-                            image: aq.author_image,
-                        },
-                        title: aq.article_title,
-                        body: aq.article_body,
-                        description: aq.article_description,
-                        slug: aq.article_slug,
-                        created_at: format! {"{:}", aq.article_creation},
-                        updated_at: format!["{:?}", aq.article_update],
-                        tag_list: aq.tags.unwrap_or(vec![]),
-                        favorited: aq.is_favorite,
-                        favorites_count: aq.favorites_count,
-                    })
-                    .collect::<Vec<_>>(),
-            )
-        })
+        .map(|v| ArticleList(v.into_iter().map(from_article_query).collect::<Vec<_>>()))
 }
 
 pub fn tags(conn: &DbConnection) -> DbResult<TagList> {
@@ -337,7 +315,6 @@ fn get_by_slug(
         .inner_join(users::table)
         .left_join(atas::table)
         .left_join(tags::table.on(tags::id.eq(atas::tag_id)))
-        .left_join(schema::favorites::table)
         .select((
             articles::all_columns(),
             users::table::all_columns(),
@@ -354,4 +331,24 @@ fn null() -> String {
 
 fn quote_option(o: Option<String>) -> String {
     o.map(|s| format!["'{}'", s]).unwrap_or(null())
+}
+
+fn from_article_query(aq: ArticleQuery) -> Article {
+    Article {
+        author: Profile {
+            username: aq.author_username,
+            following: aq.is_followed,
+            bio: aq.author_bio,
+            image: aq.author_image,
+        },
+        title: aq.article_title,
+        body: aq.article_body,
+        description: aq.article_description,
+        slug: aq.article_slug,
+        created_at: format! {"{:}", aq.article_creation},
+        updated_at: format!["{:?}", aq.article_update],
+        tag_list: aq.tags.unwrap_or(vec![]),
+        favorited: aq.is_favorite,
+        favorites_count: aq.favorites_count,
+    }
 }
