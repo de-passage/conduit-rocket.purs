@@ -43,6 +43,8 @@ struct ArticleQuery {
     is_followed: bool,
     #[sql_type = "Integer"]
     favorites_count: i32,
+    #[sql_type = "BigInt"]
+    total_articles: i64,
 }
 
 pub fn articles(
@@ -66,7 +68,10 @@ pub fn articles(
     diesel::dsl::sql_query(qwery)
         .load(conn)
         .map_err(Into::into)
-        .map(|v| ArticleList(v.into_iter().map(from_article_query).collect::<Vec<_>>()))
+        .map(|v: Vec<ArticleQuery>| ArticleList {
+            article_count: (&v).first().map(|x| x.total_articles).unwrap_or(0),
+            articles: v.into_iter().map(from_article_query).collect::<Vec<_>>(),
+        })
 }
 
 pub fn tags(conn: &DbConnection) -> DbResult<TagList> {
@@ -288,12 +293,12 @@ pub fn user_feed(
         offset.unwrap_or(0)
     ])
     .get_results::<ArticleQuery>(conn)
-    .map(|v| {
-        ArticleList(
-            v.into_iter()
-                .map(from_article_query)
-                .collect::<Vec<Article>>(),
-        )
+    .map(|v| ArticleList {
+        article_count: (&v).first().map(|x| x.total_articles).unwrap_or(0),
+        articles: v
+            .into_iter()
+            .map(from_article_query)
+            .collect::<Vec<Article>>(),
     })
     .map_err(Into::<Error>::into)
 }

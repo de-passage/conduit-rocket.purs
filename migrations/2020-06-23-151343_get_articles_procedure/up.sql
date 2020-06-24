@@ -15,7 +15,8 @@ CREATE OR REPLACE FUNCTION select_articles(
 	tags TEXT[],
 	is_favorite BOOL,
 	is_followed BOOL ,
-    favorites_count INTEGER
+    favorites_count INTEGER,
+	total_articles BIGINT
 )
 AS $$
 DECLARE 
@@ -26,6 +27,11 @@ DECLARE
 	where_clause TEXT = 'WHERE 1 = 1';
 BEGIN
 
+if maybe_favorited is not null then
+	favorite_q := 'left join favorites on favorites.article_id = articles.id';
+	where_clause := where_clause || ' and favorites.user_id = (SELECT id FROM users WHERE username = ''' || maybe_favorited ||  ''' LIMIT 1) ';
+end if;
+
 if maybe_user_id is not null then
 	follow_q := 'and followings.follower_id = ' || maybe_user_id;
 	favorite_q := 'left join favorites on favorites.article_id = articles.id and favorites.user_id = ' || maybe_user_id;
@@ -35,10 +41,6 @@ end if;
 
 if maybe_author is not null then
 	where_clause := where_clause || ' and users.username = ''' || maybe_author || '''';
-end if;
-
-if maybe_favorited is not null then
-	where_clause := where_clause || ' and favorites.user_id = (SELECT id FROM users WHERE username = ''' || maybe_favorited ||  ''' LIMIT 1) ';
 end if;
 
 RETURN QUERY EXECUTE
@@ -54,7 +56,8 @@ RETURN QUERY EXECUTE
 		array_agg(tags.tag) FILTER (WHERE tags.tag is not null) as tags,
 		' || fav_result || ' as is_favorite, 
 		' || fol_result || ' as is_followed,
-        articles.favorites_count
+        articles.favorites_count,
+		count(*) over ()
 	from articles
 	inner join users on users.id = articles.author
 	left join article_tag_associations as atas on atas.article_id = articles.id
@@ -88,7 +91,8 @@ RETURNS TABLE (
 	tags TEXT[],
 	is_favorite BOOL,
 	is_followed BOOL ,
-    favorites_count INTEGER
+    favorites_count INTEGER,
+	total_articles BIGINT
 ) 
 AS $$
 DECLARE 

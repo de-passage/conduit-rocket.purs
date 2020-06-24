@@ -96,11 +96,14 @@ impl<'r> Responder<'r> for TagList {
     }
 }
 
-pub struct ArticleList(pub Vec<Article>);
+pub struct ArticleList {
+    pub articles: Vec<Article>,
+    pub article_count: i64,
+}
 
 impl<'r> Responder<'r> for ArticleList {
     fn respond_to(self, req: &Request) -> response::Result<'r> {
-        json![{ "articles": self.0 }].respond_to(req)
+        json![{ "articles": self.articles, "articlesCount": self.article_count }].respond_to(req)
     }
 }
 
