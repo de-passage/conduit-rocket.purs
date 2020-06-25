@@ -13,7 +13,8 @@ RETURNS TABLE (
 	tags TEXT[],
 	is_favorite BOOL,
 	is_followed BOOL ,
-    favorites_count INTEGER
+    favorites_count INTEGER,
+	total_articles BIGINT
 )
 AS $$
 BEGIN
@@ -30,7 +31,8 @@ select articles.slug as article_slug,
 		array_agg(tags.tag) FILTER (WHERE tags.tag is not null) as tags,
 		count(favorites.user_id) > 0 as is_favorite, 
 		count(followings) > 0 as is_followed,
-        articles.favorites_count as favorites_count
+        articles.favorites_count as favorites_count,
+		count(*) OVER()
 	from articles
 	inner join users on users.id = articles.author
 	left join article_tag_associations as atas on atas.article_id = articles.id
