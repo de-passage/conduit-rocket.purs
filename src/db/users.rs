@@ -173,7 +173,7 @@ impl From<scrypt::errors::InvalidParams> for Error {
 }
 
 fn make_hash(password: String) -> Result<String, Error> {
-    scrypt::ScryptParams::new(14, 8, 1)
+    scrypt::ScryptParams::new(10, 8, 1)
         .map_err(Into::into)
         .and_then(|value| {
             scrypt::scrypt_simple(&password, &value)
