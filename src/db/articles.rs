@@ -396,9 +396,8 @@ pub fn user_feed(
     limit: Option<i32>,
     offset: Option<i32>,
 ) -> DbResult<ArticleList> {
-    let a = user_feed_query(limit, offset, user_id);
-    print!("{}", debug_query::<diesel::pg::Pg, _>(&a));
-    a.get_results::<ArticleQuery>(conn)
+    user_feed_query(limit, offset, user_id)
+        .get_results::<ArticleQuery>(conn)
         .map(|v| ArticleList {
             article_count: (&v).first().map(|x| x.total_articles).unwrap_or(0),
             articles: v
@@ -441,9 +440,8 @@ fn get_by_slug(
     current_user: Option<i32>,
     search: String,
 ) -> DbResult<Article> {
-    let a = select_article_by_slug(current_user, search);
-    print!("{}", debug_query::<diesel::pg::Pg, _>(&a));
-    a.get_result::<ArticleQuery>(conn)
+    select_article_by_slug(current_user, search)
+        .get_result::<ArticleQuery>(conn)
         .map_err(Into::into)
         .map(from_article_query)
 }

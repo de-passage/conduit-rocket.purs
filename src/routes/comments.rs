@@ -12,7 +12,7 @@ pub struct CommentWrapper {
 
 #[get("/articles/<slug>/comments")]
 pub fn comments(conn: DbConnection, auth: Option<AuthData>, slug: String) -> DbResult<CommentList> {
-    db::comments::for_article(&conn, auth.map(|a| a.id), &slug)
+    db::comments::for_article(&conn, auth.map(|a| a.id), slug)
 }
 
 #[post("/articles/<slug>/comments", data = "<comment>", format = "json")]

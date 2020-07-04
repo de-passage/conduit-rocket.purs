@@ -9,7 +9,7 @@ use chrono::NaiveDateTime;
 use diesel::prelude::*;
 use diesel::sql_types::*;
 
-#[derive(QueryableByName)]
+#[derive(QueryableByName, Queryable)]
 struct CommentQ {
     #[sql_type = "Integer"]
     comment_id: i32,
@@ -31,32 +31,63 @@ struct CommentQ {
     total_comments: i64,
 }
 
-pub fn for_article(conn: &DbConnection, user: Option<i32>, slug: &String) -> DbResult<CommentList> {
-    diesel::dsl::sql_query(format![
-        "select * from get_comments('{}', {})",
-        slug,
-        user.map(|x| x.to_string()).unwrap_or("NULL".to_owned()),
-    ])
-    .get_results::<CommentQ>(conn)
-    .map_err(Into::<Error>::into)
-    .map(|v: Vec<CommentQ>| CommentList {
-        comments_count: (&v).first().map(|x| x.total_comments).unwrap_or(0),
-        comments: v
-            .into_iter()
-            .map(|comment: CommentQ| Comment {
-                id: comment.comment_id,
-                body: comment.comment_body,
-                created_at: format!["{:?}", comment.comment_creation],
-                updated_at: format!["{:?}", comment.comment_update],
-                author: Profile {
-                    username: comment.author_username,
-                    bio: comment.author_bio,
-                    image: comment.author_image,
-                    following: comment.is_followed,
-                },
-            })
-            .collect::<Vec<_>>(),
-    })
+type CommentSql = (
+    Integer,
+    Text,
+    Timestamptz,
+    Timestamptz,
+    Text,
+    Nullable<Text>,
+    Nullable<Text>,
+    Bool,
+    BigInt,
+);
+
+#[derive(QueryId)]
+struct GetComments {
+    slug: String,
+    user: Option<i32>,
+}
+
+impl diesel::query_builder::QueryFragment<diesel::pg::Pg> for GetComments {
+    fn walk_ast(&self, mut out: diesel::query_builder::AstPass<diesel::pg::Pg>) -> QueryResult<()> {
+        out.push_sql("SELECT * FROM get_comments(");
+        out.push_bind_param::<Text, _>(&self.slug)?;
+        out.push_sql(", ");
+        out.push_bind_param::<Nullable<Integer>, _>(&self.user)?;
+        out.push_sql(")");
+        Ok(())
+    }
+}
+
+impl diesel::query_builder::Query for GetComments {
+    type SqlType = CommentSql;
+}
+
+impl diesel::RunQueryDsl<diesel::pg::PgConnection> for GetComments {}
+
+pub fn for_article(conn: &DbConnection, user: Option<i32>, slug: String) -> DbResult<CommentList> {
+    GetComments { user, slug }
+        .get_results::<CommentQ>(conn)
+        .map_err(Into::<Error>::into)
+        .map(|v: Vec<CommentQ>| CommentList {
+            comments_count: (&v).first().map(|x| x.total_comments).unwrap_or(0),
+            comments: v
+                .into_iter()
+                .map(|comment: CommentQ| Comment {
+                    id: comment.comment_id,
+                    body: comment.comment_body,
+                    created_at: format!["{:?}", comment.comment_creation],
+                    updated_at: format!["{:?}", comment.comment_update],
+                    author: Profile {
+                        username: comment.author_username,
+                        bio: comment.author_bio,
+                        image: comment.author_image,
+                        following: comment.is_followed,
+                    },
+                })
+                .collect::<Vec<_>>(),
+        })
 }
 
 pub fn create(
