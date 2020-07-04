@@ -73,7 +73,7 @@ pub fn feed(
 
 #[get("/articles/<slug>")]
 pub fn article(conn: DbConnection, auth: Option<AuthData>, slug: String) -> DbResult<Article> {
-    db::articles::article(&conn, auth.map(|a| a.id), &slug)
+    db::articles::article(&conn, auth.map(|a| a.id), slug)
 }
 
 #[put("/articles/<slug>", data = "<data>", format = "json")]
@@ -123,7 +123,7 @@ pub fn update_article(
 
 #[delete("/articles/<slug>")]
 pub fn delete_article(conn: DbConnection, auth: AuthData, slug: String) -> DbResult<Article> {
-    db::articles::delete(&conn, auth.id, &slug)
+    db::articles::delete(&conn, auth.id, slug)
 }
 
 #[post("/articles/<slug>/favorite")]

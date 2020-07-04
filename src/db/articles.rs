@@ -163,7 +163,7 @@ pub fn tags(conn: &DbConnection) -> DbResult<TagList> {
 pub fn article(
     conn: &DbConnection,
     current_user: Option<i32>,
-    search: &String,
+    search: String,
 ) -> DbResult<Article> {
     get_by_slug(conn, current_user, search)
 }
@@ -225,11 +225,11 @@ pub fn create(conn: &DbConnection, article: &NewArticleData, user_id: i32) -> Db
     Ok(pg_article.to_article(profile, tag_list, false))
 }
 
-pub fn delete(conn: &DbConnection, user_id: i32, to_delete: &String) -> DbResult<Article> {
+pub fn delete(conn: &DbConnection, user_id: i32, to_delete: String) -> DbResult<Article> {
     use schema::articles::dsl::*;
     let (author_id, art_id): (i32, i32) = articles
         .select((author, id))
-        .filter(slug.eq(to_delete))
+        .filter(slug.eq(&to_delete))
         .get_result(conn)
         .map_err(Into::<Error>::into)?;
     if author_id != user_id {
@@ -291,11 +291,11 @@ pub fn update(
         ))
         .execute(conn)
         .map_err(Into::<Error>::into)?;
-    get_by_slug(conn, Some(user_id), &new_slug.unwrap_or(to_update))
+    get_by_slug(conn, Some(user_id), new_slug.unwrap_or(to_update))
 }
 
 pub fn favorite(conn: &DbConnection, favoriter: i32, fav: &String) -> DbResult<Article> {
-    let mut art = get_by_slug(conn, Some(favoriter), fav)?;
+    let mut art = get_by_slug(conn, Some(favoriter), fav.clone())?;
     let a_id: i32 = articles::table
         .filter(articles::slug.eq(fav))
         .select(articles::id)
@@ -323,7 +323,7 @@ pub fn favorite(conn: &DbConnection, favoriter: i32, fav: &String) -> DbResult<A
 }
 
 pub fn unfavorite(conn: &DbConnection, favoriter: i32, fav: &String) -> DbResult<Article> {
-    let mut art = get_by_slug(conn, Some(favoriter), fav)?;
+    let mut art = get_by_slug(conn, Some(favoriter), fav.clone())?;
     use schema::favorites::dsl::*;
     let a_id: i32 = articles::table
         .filter(articles::slug.eq(fav))
@@ -409,27 +409,43 @@ pub fn user_feed(
         .map_err(Into::<Error>::into)
 }
 
+#[derive(QueryId)]
+struct SelectArticleBySlug {
+    slug: String,
+    current_user: Option<i32>,
+}
+
+fn select_article_by_slug(current_user: Option<i32>, slug: String) -> SelectArticleBySlug {
+    SelectArticleBySlug { current_user, slug }
+}
+
+impl<'a> QueryFragment<diesel::pg::Pg> for SelectArticleBySlug {
+    fn walk_ast(&self, mut out: AstPass<diesel::pg::Pg>) -> QueryResult<()> {
+        out.push_sql("SELECT * FROM select_articles(");
+        out.push_bind_param::<Nullable<Integer>, _>(&self.current_user)?;
+        out.push_sql(", NULL, NULL) as results WHERE results.article_slug = ");
+        out.push_bind_param::<Text, _>(&self.slug)?;
+        out.push_sql(" LIMIT 1");
+        Ok(())
+    }
+}
+
+impl Query for SelectArticleBySlug {
+    type SqlType = ArticleQuerySql;
+}
+
+impl RunQueryDsl<PgConnection> for SelectArticleBySlug {}
+
 fn get_by_slug(
     conn: &DbConnection,
     current_user: Option<i32>,
-    search: &String,
+    search: String,
 ) -> DbResult<Article> {
-    diesel::dsl::sql_query(format![
-        "select * from select_articles({}, NULL, NULL) as results WHERE results.article_slug = '{}' LIMIT 1",
-        quote_option(current_user),
-        search
-    ])
-    .get_result::<ArticleQuery>(conn)
-    .map_err(Into::into)
-    .map(from_article_query)
-}
-
-fn null() -> String {
-    "NULL".to_owned()
-}
-
-fn quote_option<T: std::fmt::Display>(o: Option<T>) -> String {
-    o.map(|s| format!["'{}'", s]).unwrap_or(null())
+    let a = select_article_by_slug(current_user, search);
+    print!("{}", debug_query::<diesel::pg::Pg, _>(&a));
+    a.get_result::<ArticleQuery>(conn)
+        .map_err(Into::into)
+        .map(from_article_query)
 }
 
 fn from_article_query(aq: ArticleQuery) -> Article {
