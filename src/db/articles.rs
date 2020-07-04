@@ -1,3 +1,6 @@
+use super::get_articles::*;
+use super::select_article_by_slug::*;
+use super::user_feed::*;
 use crate::db::{DbConnection, DbResult};
 use crate::errors;
 use crate::models::article::{
@@ -8,13 +11,8 @@ use crate::schema;
 use ammonia;
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
-use diesel::query_builder::*;
 use diesel::sql_types::*;
 use errors::Error;
-use std::cmp::{max, min};
-
-const LIMIT: i32 = 20;
-const MAX_LIMIT: i32 = 500;
 
 #[derive(Queryable, QueryableByName)]
 struct ArticleQuery {
@@ -47,85 +45,6 @@ struct ArticleQuery {
     #[sql_type = "BigInt"]
     total_articles: i64,
 }
-
-type ArticleQuerySql = (
-    Text,
-    Text,
-    Text,
-    Text,
-    Timestamptz,
-    Timestamptz,
-    Text,
-    Nullable<Text>,
-    Nullable<Text>,
-    Nullable<Array<Text>>,
-    Bool,
-    Bool,
-    Integer,
-    BigInt,
-);
-
-#[derive(QueryId)]
-struct GetArticles {
-    limit: i32,
-    offset: i32,
-    current_user: Option<i32>,
-    tag: Option<String>,
-    favorited: Option<String>,
-    author: Option<String>,
-}
-
-impl QueryFragment<diesel::pg::Pg> for GetArticles {
-    fn walk_ast(&self, mut out: AstPass<diesel::pg::Pg>) -> QueryResult<()> {
-        out.push_sql("SELECT * FROM get_articles(");
-        out.push_bind_param::<Integer, _>(&self.limit)?;
-        out.push_sql(", ");
-        out.push_bind_param::<Integer, _>(&self.offset)?;
-        out.push_sql(", ");
-        out.push_bind_param::<Nullable<Integer>, _>(&self.current_user)?;
-        out.push_sql(", ");
-        out.push_bind_param::<Nullable<Text>, _>(&self.tag)?;
-        out.push_sql(", ");
-        out.push_bind_param::<Nullable<Text>, _>(&self.favorited)?;
-        out.push_sql(", ");
-        out.push_bind_param::<Nullable<Text>, _>(&self.author)?;
-        out.push_sql(")");
-        Ok(())
-    }
-}
-
-impl Query for GetArticles {
-    type SqlType = ArticleQuerySql;
-}
-
-impl RunQueryDsl<diesel::pg::PgConnection> for GetArticles {}
-
-fn coerce_limit(limit: Option<i32>) -> i32 {
-    min(max(1, limit.unwrap_or(LIMIT.into())), MAX_LIMIT)
-}
-
-fn coerce_offset(offset: Option<i32>) -> i32 {
-    max(0, offset.unwrap_or(0))
-}
-
-fn get_articles(
-    limit: Option<i32>,
-    offset: Option<i32>,
-    current_user: Option<i32>,
-    tag: Option<String>,
-    favorited: Option<String>,
-    author: Option<String>,
-) -> GetArticles {
-    GetArticles {
-        limit: coerce_limit(limit),
-        offset: coerce_limit(offset),
-        current_user,
-        tag,
-        favorited,
-        author,
-    }
-}
-
 pub fn articles(
     conn: &DbConnection,
     m_tag: Option<String>,
@@ -357,39 +276,6 @@ pub fn unfavorite(conn: &DbConnection, favoriter: i32, fav: &String) -> DbResult
     }
 }
 
-#[derive(QueryId)]
-struct UserFeed {
-    limit: i32,
-    offset: i32,
-    user_id: i32,
-}
-
-fn user_feed_query(limit: Option<i32>, offset: Option<i32>, user_id: i32) -> UserFeed {
-    UserFeed {
-        limit: coerce_limit(limit),
-        offset: coerce_offset(offset),
-        user_id,
-    }
-}
-
-impl Query for UserFeed {
-    type SqlType = ArticleQuerySql;
-}
-
-impl RunQueryDsl<diesel::pg::PgConnection> for UserFeed {}
-
-impl QueryFragment<diesel::pg::Pg> for UserFeed {
-    fn walk_ast(&self, mut out: AstPass<diesel::pg::Pg>) -> QueryResult<()> {
-        out.push_sql("SELECT * FROM user_feed(");
-        out.push_bind_param::<Integer, _>(&self.user_id)?;
-        out.push_sql(") LIMIT ");
-        out.push_bind_param::<Integer, _>(&self.limit)?;
-        out.push_sql(" OFFSET ");
-        out.push_bind_param::<Integer, _>(&self.offset)?;
-        Ok(())
-    }
-}
-
 pub fn user_feed(
     conn: &DbConnection,
     user_id: i32,
@@ -407,33 +293,6 @@ pub fn user_feed(
         })
         .map_err(Into::<Error>::into)
 }
-
-#[derive(QueryId)]
-struct SelectArticleBySlug {
-    slug: String,
-    current_user: Option<i32>,
-}
-
-fn select_article_by_slug(current_user: Option<i32>, slug: String) -> SelectArticleBySlug {
-    SelectArticleBySlug { current_user, slug }
-}
-
-impl<'a> QueryFragment<diesel::pg::Pg> for SelectArticleBySlug {
-    fn walk_ast(&self, mut out: AstPass<diesel::pg::Pg>) -> QueryResult<()> {
-        out.push_sql("SELECT * FROM select_articles(");
-        out.push_bind_param::<Nullable<Integer>, _>(&self.current_user)?;
-        out.push_sql(", NULL, NULL) as results WHERE results.article_slug = ");
-        out.push_bind_param::<Text, _>(&self.slug)?;
-        out.push_sql(" LIMIT 1");
-        Ok(())
-    }
-}
-
-impl Query for SelectArticleBySlug {
-    type SqlType = ArticleQuerySql;
-}
-
-impl RunQueryDsl<PgConnection> for SelectArticleBySlug {}
 
 fn get_by_slug(
     conn: &DbConnection,

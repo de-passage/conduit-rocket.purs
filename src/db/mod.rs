@@ -1,7 +1,14 @@
-pub mod users;
+mod article_query;
 pub mod articles;
 pub mod comments;
+mod get_articles;
+mod get_comments;
+mod limits;
+mod select_article_by_slug;
+mod user_feed;
+pub mod users;
 
+use crate::errors;
 use diesel::connection::{Connection, SimpleConnection};
 use diesel::deserialize::{Queryable, QueryableByName};
 use diesel::query_builder::*;
@@ -9,7 +16,6 @@ use diesel::result::{ConnectionResult, QueryResult};
 use diesel::sql_types::HasSqlType;
 use rocket_contrib;
 use rocket_contrib::databases::diesel;
-use crate::errors;
 
 #[database("postgres")]
 pub struct DbConnection(diesel::PgConnection);
