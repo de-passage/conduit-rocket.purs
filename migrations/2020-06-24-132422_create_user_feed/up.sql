@@ -1,5 +1,5 @@
 -- Your SQL goes here
-CREATE OR REPLACE FUNCTION user_feed(feed_user_id INTEGER, a_limit INTEGER, a_offset INTEGER)
+CREATE OR REPLACE FUNCTION user_feed(feed_user_id INTEGER)
 RETURNS TABLE (
 	article_slug TEXT,
 	article_title TEXT,
