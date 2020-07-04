@@ -17,8 +17,8 @@ pub fn articles(
     auth: Option<AuthData>,
     tag: Option<String>,
     author: Option<String>,
-    offset: Option<u32>,
-    limit: Option<u32>,
+    offset: Option<i32>,
+    limit: Option<i32>,
     favorited: Option<String>,
 ) -> DbResult<ArticleList> {
     db::articles::articles(
@@ -65,8 +65,8 @@ pub fn new_article(
 pub fn feed(
     conn: DbConnection,
     auth: AuthData,
-    limit: Option<u32>,
-    offset: Option<u32>,
+    limit: Option<i32>,
+    offset: Option<i32>,
 ) -> DbResult<ArticleList> {
     db::articles::user_feed(&conn, auth.id, limit, offset)
 }

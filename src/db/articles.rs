@@ -8,14 +8,15 @@ use crate::schema;
 use ammonia;
 use chrono::NaiveDateTime;
 use diesel::prelude::*;
+use diesel::query_builder::*;
 use diesel::sql_types::*;
 use errors::Error;
-use std::cmp::min;
+use std::cmp::{max, min};
 
-const LIMIT: u32 = 20;
-const MAX_LIMIT: u32 = 500;
+const LIMIT: i32 = 20;
+const MAX_LIMIT: i32 = 500;
 
-#[derive(QueryableByName)]
+#[derive(Queryable, QueryableByName)]
 struct ArticleQuery {
     #[sql_type = "Text"]
     article_slug: String,
@@ -47,31 +48,107 @@ struct ArticleQuery {
     total_articles: i64,
 }
 
+type ArticleQuerySql = (
+    Text,
+    Text,
+    Text,
+    Text,
+    Timestamptz,
+    Timestamptz,
+    Text,
+    Nullable<Text>,
+    Nullable<Text>,
+    Nullable<Array<Text>>,
+    Bool,
+    Bool,
+    Integer,
+    BigInt,
+);
+
+#[derive(QueryId)]
+struct GetArticles {
+    limit: i32,
+    offset: i32,
+    current_user: Option<i32>,
+    tag: Option<String>,
+    favorited: Option<String>,
+    author: Option<String>,
+}
+
+impl QueryFragment<diesel::pg::Pg> for GetArticles {
+    fn walk_ast(&self, mut out: AstPass<diesel::pg::Pg>) -> QueryResult<()> {
+        out.push_sql("SELECT * FROM get_articles(");
+        out.push_bind_param::<Integer, _>(&self.limit)?;
+        out.push_sql(", ");
+        out.push_bind_param::<Integer, _>(&self.offset)?;
+        out.push_sql(", ");
+        out.push_bind_param::<Nullable<Integer>, _>(&self.current_user)?;
+        out.push_sql(", ");
+        out.push_bind_param::<Nullable<Text>, _>(&self.tag)?;
+        out.push_sql(", ");
+        out.push_bind_param::<Nullable<Text>, _>(&self.favorited)?;
+        out.push_sql(", ");
+        out.push_bind_param::<Nullable<Text>, _>(&self.author)?;
+        out.push_sql(")");
+        Ok(())
+    }
+}
+
+impl Query for GetArticles {
+    type SqlType = ArticleQuerySql;
+}
+
+impl RunQueryDsl<diesel::pg::PgConnection> for GetArticles {}
+
+fn coerce_limit(limit: Option<i32>) -> i32 {
+    min(max(1, limit.unwrap_or(LIMIT.into())), MAX_LIMIT)
+}
+
+fn coerce_offset(offset: Option<i32>) -> i32 {
+    max(0, offset.unwrap_or(0))
+}
+
+fn get_articles(
+    limit: Option<i32>,
+    offset: Option<i32>,
+    current_user: Option<i32>,
+    tag: Option<String>,
+    favorited: Option<String>,
+    author: Option<String>,
+) -> GetArticles {
+    GetArticles {
+        limit: coerce_limit(limit),
+        offset: coerce_limit(offset),
+        current_user,
+        tag,
+        favorited,
+        author,
+    }
+}
+
 pub fn articles(
     conn: &DbConnection,
     m_tag: Option<String>,
     m_author: Option<String>,
-    m_offset: Option<u32>,
-    m_limit: Option<u32>,
+    m_offset: Option<i32>,
+    m_limit: Option<i32>,
     m_favorited: Option<String>,
     current_user: Option<i32>,
 ) -> DbResult<ArticleList> {
-    let qwery = format![
-        "select * from get_articles({}, {}, {}, {}, {}, {})",
-        m_limit.unwrap_or(LIMIT),
-        m_offset.unwrap_or(0),
-        current_user.map(|x| x.to_string()).unwrap_or(null()),
-        quote_option(m_tag),
-        quote_option(m_favorited),
-        quote_option(m_author)
-    ];
-    diesel::dsl::sql_query(qwery)
-        .load(conn)
-        .map_err(Into::into)
-        .map(|v: Vec<ArticleQuery>| ArticleList {
-            article_count: (&v).first().map(|x| x.total_articles).unwrap_or(0),
-            articles: v.into_iter().map(from_article_query).collect::<Vec<_>>(),
-        })
+    get_articles(
+        m_limit,
+        m_offset,
+        current_user,
+        m_tag,
+        m_favorited,
+        m_author,
+    )
+    .load(conn)
+    .map_err(Into::into)
+    .map(|v: Vec<ArticleQuery>| ArticleList {
+        article_count: (&v).first().map(|x| x.total_articles).unwrap_or(0),
+        articles: v.into_iter().map(from_article_query).collect::<Vec<_>>(),
+    })
 }
 
 pub fn tags(conn: &DbConnection) -> DbResult<TagList> {
@@ -280,27 +357,56 @@ pub fn unfavorite(conn: &DbConnection, favoriter: i32, fav: &String) -> DbResult
     }
 }
 
+#[derive(QueryId)]
+struct UserFeed {
+    limit: i32,
+    offset: i32,
+    user_id: i32,
+}
+
+fn user_feed_query(limit: Option<i32>, offset: Option<i32>, user_id: i32) -> UserFeed {
+    UserFeed {
+        limit: coerce_limit(limit),
+        offset: coerce_offset(offset),
+        user_id,
+    }
+}
+
+impl Query for UserFeed {
+    type SqlType = ArticleQuerySql;
+}
+
+impl RunQueryDsl<diesel::pg::PgConnection> for UserFeed {}
+
+impl QueryFragment<diesel::pg::Pg> for UserFeed {
+    fn walk_ast(&self, mut out: AstPass<diesel::pg::Pg>) -> QueryResult<()> {
+        out.push_sql("SELECT * FROM user_feed(");
+        out.push_bind_param::<Integer, _>(&self.user_id)?;
+        out.push_sql(") LIMIT ");
+        out.push_bind_param::<Integer, _>(&self.limit)?;
+        out.push_sql(" OFFSET ");
+        out.push_bind_param::<Integer, _>(&self.offset)?;
+        Ok(())
+    }
+}
+
 pub fn user_feed(
     conn: &DbConnection,
     user_id: i32,
-    limit: Option<u32>,
-    offset: Option<u32>,
+    limit: Option<i32>,
+    offset: Option<i32>,
 ) -> DbResult<ArticleList> {
-    diesel::dsl::sql_query(format![
-        "select * from user_feed({}, {}, {})",
-        user_id,
-        min(limit.unwrap_or(LIMIT), MAX_LIMIT),
-        offset.unwrap_or(0)
-    ])
-    .get_results::<ArticleQuery>(conn)
-    .map(|v| ArticleList {
-        article_count: (&v).first().map(|x| x.total_articles).unwrap_or(0),
-        articles: v
-            .into_iter()
-            .map(from_article_query)
-            .collect::<Vec<Article>>(),
-    })
-    .map_err(Into::<Error>::into)
+    let a = user_feed_query(limit, offset, user_id);
+    print!("{}", debug_query::<diesel::pg::Pg, _>(&a));
+    a.get_results::<ArticleQuery>(conn)
+        .map(|v| ArticleList {
+            article_count: (&v).first().map(|x| x.total_articles).unwrap_or(0),
+            articles: v
+                .into_iter()
+                .map(from_article_query)
+                .collect::<Vec<Article>>(),
+        })
+        .map_err(Into::<Error>::into)
 }
 
 fn get_by_slug(
