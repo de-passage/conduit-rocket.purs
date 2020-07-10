@@ -38,14 +38,9 @@ pub fn configure_rocket() -> Result<rocket::Config, String> {
     let mut databases = HashMap::new();
     databases.insert("postgres", Value::from(database_config));
 
-    let mut c = rocket::Config::build(environment)
+    rocket::Config::build(environment)
         .port(port)
-        .extra("databases", databases);
-
-    if cfg!(not(debug_assertions)) {
-        c = c.secret_key(Config::from_env()?.secret)
-    }
-
-    c.finalize()
+        .extra("databases", databases)
+        .finalize()
         .map_err(|err| format!("Rocket configuration failed: {}", err.to_string()))
 }
