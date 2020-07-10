@@ -18,9 +18,11 @@ extern crate serde_derive;
 #[macro_use]
 extern crate diesel;
 
-use crate::config::Config;
+use crate::config::{configure_rocket, Config};
 use crate::db::DbConnection;
 use crate::errors::Error;
+#[cfg(debug_assertions)]
+use dotenv::dotenv;
 use rocket::Request;
 use rocket_cors;
 use rocket_cors::CorsOptions;
@@ -45,9 +47,13 @@ fn cors_options() -> CorsOptions {
 }
 
 fn main() -> Result<(), String> {
+    if cfg!(debug_assertions) || cfg!(test) {
+        dotenv().ok();
+    }
+
     let cors = cors_options().to_cors().map_err(|err| err.to_string())?;
     let config = Config::from_env()?;
-    rocket::ignite()
+    rocket::custom(configure_rocket()?)
         .manage(config)
         .mount(
             "/api",
