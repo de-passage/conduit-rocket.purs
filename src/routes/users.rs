@@ -1,4 +1,5 @@
 use crate::authentication::AuthData;
+use crate::config::Config;
 use crate::db;
 use crate::db::{DbConnection, DbResult};
 use crate::errors::Error;
@@ -7,6 +8,7 @@ use regex;
 use rocket::response;
 use rocket::response::Responder;
 use rocket::Request;
+use rocket::State;
 use rocket_contrib::json::Json;
 use serde::Deserialize;
 
@@ -33,13 +35,9 @@ impl<'r> Responder<'r> for Profile {
 pub fn login(
     conn: DbConnection,
     user: Json<UserWrapper<LoginData>>,
+    config: State<Config>,
 ) -> DbResult<AuthenticatedUser> {
-    db::users::authenticate(
-        &conn,
-        &user.user.email,
-        &user.user.password,
-        &"secret".to_owned(),
-    )
+    db::users::authenticate(&conn, &user.user.email, &user.user.password, &config.secret)
 }
 
 #[post("/users", data = "<data>", format = "json")]
@@ -94,6 +92,7 @@ pub fn update_current_user(
     conn: DbConnection,
     auth: AuthData,
     data: Json<UserWrapper<UserUpdateData>>,
+    config: State<Config>,
 ) -> DbResult<AuthenticatedUser> {
     let user = &data.user;
     let mut error = false;
@@ -133,7 +132,7 @@ pub fn update_current_user(
     if error {
         Err(Error::ValidationFailed(errors))
     } else {
-        db::users::update(&conn, auth.id, &user, &"secret".to_owned())
+        db::users::update(&conn, auth.id, &user, &config.secret)
     }
 }
 

@@ -1,6 +1,7 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 
 mod authentication;
+mod config;
 mod db;
 mod errors;
 mod format;
@@ -17,6 +18,7 @@ extern crate serde_derive;
 #[macro_use]
 extern crate diesel;
 
+use crate::config::Config;
 use crate::db::DbConnection;
 use crate::errors::Error;
 use rocket::Request;
@@ -42,9 +44,11 @@ fn cors_options() -> CorsOptions {
     CorsOptions::default()
 }
 
-fn main() -> Result<(), rocket_cors::Error> {
-    let cors = cors_options().to_cors()?;
+fn main() -> Result<(), String> {
+    let cors = cors_options().to_cors().map_err(|err| err.to_string())?;
+    let config = Config::from_env()?;
     rocket::ignite()
+        .manage(config)
         .mount(
             "/api",
             routes![
