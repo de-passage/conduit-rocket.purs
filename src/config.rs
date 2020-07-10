@@ -42,7 +42,7 @@ pub fn configure_rocket() -> Result<rocket::Config, String> {
         .port(port)
         .extra("databases", databases);
 
-    if cfg!(release) {
+    if cfg!(not(debug_assertions)) {
         c = c.secret_key(Config::from_env()?.secret)
     }
 
