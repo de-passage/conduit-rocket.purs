@@ -21,7 +21,6 @@ extern crate diesel;
 use crate::config::{configure_rocket, Config};
 use crate::db::DbConnection;
 use crate::errors::Error;
-#[cfg(debug_assertions)]
 use dotenv::dotenv;
 use rocket::Request;
 use rocket_cors;
