@@ -44,6 +44,7 @@ pub fn login(
 pub fn register(
     conn: DbConnection,
     data: Json<UserWrapper<NewUserData>>,
+    config: State<Config>,
 ) -> DbResult<AuthenticatedUser> {
     let user = &data.user;
     let mut errors = json![{}];
@@ -77,14 +78,18 @@ pub fn register(
             &user.username,
             &user.email,
             user.password.clone(),
-            &"secret".to_owned(),
+            &config.secret,
         )
     }
 }
 
 #[get("/user")]
-pub fn current_user(conn: DbConnection, auth: AuthData) -> DbResult<AuthenticatedUser> {
-    db::users::find_by_id(&conn, auth.id).and_then(|u| u.to_authenticated(&"secret".to_owned()))
+pub fn current_user(
+    conn: DbConnection,
+    auth: AuthData,
+    config: State<Config>,
+) -> DbResult<AuthenticatedUser> {
+    db::users::find_by_id(&conn, auth.id).and_then(|u| u.to_authenticated(&config.secret))
 }
 
 #[put("/user", data = "<data>", format = "json")]

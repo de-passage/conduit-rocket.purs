@@ -3,7 +3,7 @@
 Conduit is a Medium clone, intended to showcase how to build the same web application using different 
 front end and back end frameworks. This particular implementation uses Rust, with Rocket and Diesel as 
 the web framework and database interface respectively. 
-The API is live at `https://dashboard.heroku.com/apps/conduit-rocket/api` but doesn't provide a front end.
+The API is live at `https://conduit-rocket.herokuapp.com//api` but doesn't provide a front end.
 You can use [https://sylvainleclercq.com/conduit.purs](this one) in order to access it. Simply use the 'Developer'
 panel to change the API endpoint to the one given above.
 
