@@ -51,7 +51,7 @@ pub fn get_articles(
 ) -> GetArticles {
     GetArticles {
         limit: coerce_limit(limit),
-        offset: coerce_limit(offset),
+        offset: coerce_offset(offset),
         current_user,
         tag,
         favorited,
