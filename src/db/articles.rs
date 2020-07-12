@@ -1,5 +1,6 @@
 use super::get_articles::*;
 use super::select_article_by_slug::*;
+use super::tags::{get_tags, Tag};
 use super::user_feed::*;
 use crate::db::{DbConnection, DbResult};
 use crate::errors;
@@ -71,12 +72,10 @@ pub fn articles(
 }
 
 pub fn tags(conn: &DbConnection) -> DbResult<TagList> {
-    schema::tags::table
-        .select(schema::tags::tag)
-        .limit(20)
+    get_tags(20)
         .get_results(conn)
         .map_err(Into::into)
-        .map(TagList)
+        .map(|tags: Vec<Tag>| TagList(tags.into_iter().map(|tag| tag.tag).collect::<Vec<_>>()))
 }
 
 pub fn article(
@@ -112,36 +111,57 @@ pub fn create(conn: &DbConnection, article: &NewArticleData, user_id: i32) -> Db
     let tag_list: Vec<String> = article
         .tag_list
         .clone()
-        .map(|tag_list| -> DbResult<Vec<String>> {
-            use schema::tags;
-            let tags = tag_list.iter().map(|t| tags::tag.eq(t)).collect::<Vec<_>>();
-            diesel::insert_into(tags::table)
-                .values(tags)
-                .on_conflict_do_nothing()
-                .execute(conn)
-                .map_err(Into::<Error>::into)?;
-
-            let ids: Vec<i32> = tags::table
-                .filter(tags::tag.eq_any(&tag_list))
-                .select(tags::id)
-                .get_results(conn)
-                .map_err(Into::<Error>::into)?;
-
-            use schema::article_tag_associations as atas;
-            diesel::insert_into(atas::table)
-                .values(
-                    ids.into_iter()
-                        .map(|tag_id| (atas::article_id.eq(pg_article.id), atas::tag_id.eq(tag_id)))
-                        .collect::<Vec<_>>(),
-                )
-                .execute(conn)
-                .map_err(Into::<Error>::into)?;
-
-            Ok(tag_list)
-        })
+        .map(|tag_list| -> DbResult<Vec<String>> { update_tags(tag_list, pg_article.id, conn) })
         .unwrap_or(Ok(vec![]))?;
 
     Ok(pg_article.to_article(profile, tag_list, false))
+}
+
+fn update_tags(
+    tag_list: Vec<String>,
+    article_id: i32,
+    conn: &DbConnection,
+) -> DbResult<Vec<String>> {
+    use schema::tags;
+    let correct_tags = tag_list
+        .iter()
+        .map(|t| {
+            ammonia::clean(&t)
+                .trim()
+                .to_lowercase()
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join("-")
+        })
+        .filter(|t| t != "")
+        .collect::<Vec<_>>();
+    let tags = correct_tags
+        .iter()
+        .map(|t| tags::tag.eq(t))
+        .collect::<Vec<_>>();
+    diesel::insert_into(tags::table)
+        .values(tags)
+        .on_conflict_do_nothing()
+        .execute(conn)
+        .map_err(Into::<Error>::into)?;
+
+    let ids: Vec<i32> = tags::table
+        .filter(tags::tag.eq_any(&correct_tags))
+        .select(tags::id)
+        .get_results(conn)
+        .map_err(Into::<Error>::into)?;
+
+    use schema::article_tag_associations as atas;
+    diesel::insert_into(atas::table)
+        .values(
+            ids.into_iter()
+                .map(|tag_id| (atas::article_id.eq(article_id), atas::tag_id.eq(tag_id)))
+                .collect::<Vec<_>>(),
+        )
+        .execute(conn)
+        .map_err(Into::<Error>::into)?;
+
+    Ok(correct_tags)
 }
 
 pub fn delete(conn: &DbConnection, user_id: i32, to_delete: String) -> DbResult<Article> {
@@ -210,6 +230,10 @@ pub fn update(
         ))
         .execute(conn)
         .map_err(Into::<Error>::into)?;
+
+    data.tag_list
+        .clone()
+        .map(|tag_list| -> DbResult<Vec<String>> { update_tags(tag_list, art_id, conn) });
     get_by_slug(conn, Some(user_id), new_slug.unwrap_or(to_update))
 }
 
