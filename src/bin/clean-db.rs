@@ -26,6 +26,15 @@ fn main() {
         use schema::users::dsl::*;
         delete(users.filter(username.ne(all(vec!["Admin", "Sylvain Leclercq"]))))
             .execute(&connection)
-            .expect("Deletion failed");
+            .expect("Couldn't delete users");
+    }
+    {
+        use schema::article_tag_associations as ata;
+        use schema::tags::dsl::*;
+        let tag_assocs = ata::table.select(ata::tag_id);
+        let target = tags.filter(id.ne(any(tag_assocs)));
+        delete(target)
+            .execute(&connection)
+            .expect("Couldn't delete tags");
     }
 }
