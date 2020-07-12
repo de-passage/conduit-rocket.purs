@@ -32,7 +32,7 @@ fn main() {
         use schema::article_tag_associations as ata;
         use schema::tags::dsl::*;
         let tag_assocs = ata::table.select(ata::tag_id);
-        let target = tags.filter(id.ne(any(tag_assocs)));
+        let target = tags.filter(id.ne(all(tag_assocs)));
         delete(target)
             .execute(&connection)
             .expect("Couldn't delete tags");
