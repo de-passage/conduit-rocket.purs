@@ -73,6 +73,7 @@ pub fn articles(
 pub fn tags(conn: &DbConnection) -> DbResult<TagList> {
     schema::tags::table
         .select(schema::tags::tag)
+        .inner_join(schema::article_tag_associations::table)
         .limit(20)
         .get_results(conn)
         .map_err(Into::into)
