@@ -123,7 +123,22 @@ fn update_tags(
     conn: &DbConnection,
 ) -> DbResult<Vec<String>> {
     use schema::tags;
-    let tags = tag_list.iter().map(|t| tags::tag.eq(t)).collect::<Vec<_>>();
+    let correct_tags = tag_list
+        .iter()
+        .map(|t| {
+            ammonia::clean(&t)
+                .trim()
+                .to_lowercase()
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join("-")
+        })
+        .filter(|t| t != "")
+        .collect::<Vec<_>>();
+    let tags = correct_tags
+        .iter()
+        .map(|t| tags::tag.eq(t))
+        .collect::<Vec<_>>();
     diesel::insert_into(tags::table)
         .values(tags)
         .on_conflict_do_nothing()
@@ -131,7 +146,7 @@ fn update_tags(
         .map_err(Into::<Error>::into)?;
 
     let ids: Vec<i32> = tags::table
-        .filter(tags::tag.eq_any(&tag_list))
+        .filter(tags::tag.eq_any(&correct_tags))
         .select(tags::id)
         .get_results(conn)
         .map_err(Into::<Error>::into)?;
@@ -146,7 +161,7 @@ fn update_tags(
         .execute(conn)
         .map_err(Into::<Error>::into)?;
 
-    Ok(tag_list)
+    Ok(correct_tags)
 }
 
 pub fn delete(conn: &DbConnection, user_id: i32, to_delete: String) -> DbResult<Article> {
