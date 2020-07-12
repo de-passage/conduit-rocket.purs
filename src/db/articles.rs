@@ -1,5 +1,6 @@
 use super::get_articles::*;
 use super::select_article_by_slug::*;
+use super::tags::{get_tags, Tag};
 use super::user_feed::*;
 use crate::db::{DbConnection, DbResult};
 use crate::errors;
@@ -71,13 +72,10 @@ pub fn articles(
 }
 
 pub fn tags(conn: &DbConnection) -> DbResult<TagList> {
-    schema::tags::table
-        .select(schema::tags::tag)
-        .inner_join(schema::article_tag_associations::table)
-        .limit(20)
+    get_tags(20)
         .get_results(conn)
         .map_err(Into::into)
-        .map(TagList)
+        .map(|tags: Vec<Tag>| TagList(tags.into_iter().map(|tag| tag.tag).collect::<Vec<_>>()))
 }
 
 pub fn article(

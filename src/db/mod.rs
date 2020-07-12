@@ -5,6 +5,7 @@ mod get_articles;
 mod get_comments;
 mod limits;
 mod select_article_by_slug;
+mod tags;
 mod user_feed;
 pub mod users;
 
